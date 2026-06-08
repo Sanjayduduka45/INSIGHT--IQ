@@ -446,6 +446,11 @@ def classify_domain(df: pd.DataFrame, schema: DatasetSchema) -> DomainResult:
         scores[domain] = round(score, 4)
         evidence_map[domain] = matches[:5]  # Top 5 evidence terms
 
+    # Special overrides/boosts for marketing/advertising datasets
+    has_marketing_keywords = any(kw in col_tokens for kw in ["tv", "radio", "newspaper", "cpc", "ad_spend", "clicks", "impressions", "spend", "budget", "campaign"])
+    if has_marketing_keywords:
+        scores["Marketing"] = scores.get("Marketing", 0) + 0.35
+
     # Also consider value-based signals
     _boost_from_values(df, scores)
 
@@ -460,8 +465,8 @@ def classify_domain(df: pd.DataFrame, schema: DatasetSchema) -> DomainResult:
     # If a domain has 15-20% of its keywords matched, it should be highly confident.
     final_confidence = round(min(best_score * 4.0, 0.99), 2)
 
-    # If confidence is below 70%, fall back to Generic strictly
-    if final_confidence < 0.70:
+    # If confidence is below 30%, fall back to Generic strictly
+    if final_confidence < 0.30:
         return DomainResult(
             domain="Generic",
             confidence=final_confidence,

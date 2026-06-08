@@ -23,17 +23,13 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [datasets, setDatasets] = useState<Record<string, SafeAny>[]>([])
-  const [loadingDatasets, setLoadingDatasets] = useState(false)
 
   const fetchDatasets = useCallback(async () => {
-    setLoadingDatasets(true)
     try {
       const list = await listDatasets()
       setDatasets(list)
     } catch (err) {
       console.error('Failed to list datasets:', err)
-    } finally {
-      setLoadingDatasets(false)
     }
   }, [])
 

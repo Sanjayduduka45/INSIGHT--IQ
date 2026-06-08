@@ -57,12 +57,20 @@ class DatasetSchema:
 _ID_KEYWORDS = {"id", "key", "code", "index", "pk", "uuid", "guid", "number", "no", "num"}
 _DATE_KEYWORDS = {
     "date",
+    "datetime",
+    "timestamp",
+    "created_at",
+    "updated_at",
+    "order_date",
+    "purchase_date",
+    "transaction_date",
+    "invoice_date",
+    "sale_date",
     "time",
     "day",
     "month",
     "year",
     "period",
-    "timestamp",
     "created",
     "updated",
     "modified",
@@ -197,7 +205,7 @@ def _profile_column(df: pd.DataFrame, col: str) -> ColumnSchema:
         cs.semantic_type = "numeric"
         cs.role = _detect_numeric_role(cl, unique, n)
         cs.stats = _numeric_stats(series)
-    elif _is_parseable_date(series):
+    elif _is_parseable_date(series, col):
         cs.semantic_type = "datetime"
         cs.role = "date"
     elif pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series):
@@ -220,7 +228,7 @@ def _profile_column(df: pd.DataFrame, col: str) -> ColumnSchema:
 
     # ── Override role with keyword detection ─────────────────────
     if cs.semantic_type == "datetime" or any(kw in cl for kw in _DATE_KEYWORDS):
-        if _is_parseable_date(series) or pd.api.types.is_datetime64_any_dtype(series):
+        if _is_parseable_date(series, col) or pd.api.types.is_datetime64_any_dtype(series):
             cs.role = "date"
 
     return cs
@@ -275,18 +283,38 @@ def _numeric_stats(series: pd.Series) -> dict:
     }
 
 
-def _is_parseable_date(series: pd.Series) -> bool:
-    """Check if a string column contains parseable dates."""
+def _is_parseable_date(series: pd.Series, col_name: str = "") -> bool:
+    """Check if a column contains parseable dates, optionally using name heuristics."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return True
-    if not (pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series)):
+        
+    is_date_name = False
+    if col_name:
+        col_lower = col_name.lower()
+        date_indicators = ["date", "timestamp", "created_at", "updated_at", "order_date", "purchase_date", "transaction_date", "invoice_date", "sale_date", "datetime"]
+        if any(ind in col_lower for ind in date_indicators):
+            is_date_name = True
+            
+    if not (pd.api.types.is_string_dtype(series) or pd.api.types.is_object_dtype(series) or pd.api.types.is_numeric_dtype(series)):
         return False
-    sample = series.dropna().head(20)
+        
+    sample = series.dropna().head(30)
     if sample.empty:
         return False
+        
+    if pd.api.types.is_numeric_dtype(series):
+        mean_val = sample.mean()
+        if all(1900 <= x <= 2100 for x in sample):
+            return True
+        if is_date_name and mean_val > 1e9:
+            return True
+        return False
+        
     try:
-        parsed = pd.to_datetime(sample, errors="coerce", format="mixed")
+        sample_str = sample.astype(str)
+        parsed = pd.to_datetime(sample_str, errors="coerce", format="mixed")
         success_rate = parsed.notna().mean()
-        return success_rate > 0.8
+        threshold = 0.5 if is_date_name else 0.8
+        return success_rate > threshold
     except Exception:
         return False

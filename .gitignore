@@ -87,3 +87,4 @@ docs/_build/
 .env.*
 *.env
 **/.env
+uploads/

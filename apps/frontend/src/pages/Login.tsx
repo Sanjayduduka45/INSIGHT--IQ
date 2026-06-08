@@ -99,10 +99,7 @@ export default function Login({ onSuccess }: Props) {
         )}
 
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg mx-auto mb-4 shadow-lg shadow-blue-500/20"
-               style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}>
-            IQ
-          </div>
+          <img src="/logo.png" alt="InsightIQ Logo" className="w-12 h-12 object-contain rounded-2xl mx-auto mb-4 shadow-lg shadow-blue-500/20" />
           <h2 className="text-2xl font-black tracking-tight text-white">
             {isForgot ? 'Reset Password' : isSignUp ? 'Create Account' : 'Welcome to InsightIQ'}
           </h2>

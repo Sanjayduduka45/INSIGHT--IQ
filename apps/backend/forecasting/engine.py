@@ -539,10 +539,10 @@ def detect_forecastable_columns(
         results.append(
             {
                 "column": col,
-                "data_points": len(ts_agg),
-                "date_range_days": (ts_agg.index[-1] - ts_agg.index[0]).days,
-                "variation_coefficient": round(float(cv), 4),
-                "forecastable": cv > 0.01,
+                "data_points": int(len(ts_agg)),
+                "date_range_days": int((ts_agg.index[-1] - ts_agg.index[0]).days),
+                "variation_coefficient": float(round(float(cv), 4)),
+                "forecastable": bool(cv > 0.01),
             }
         )
 

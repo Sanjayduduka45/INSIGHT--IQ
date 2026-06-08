@@ -86,10 +86,7 @@ export default function App() {
         {/* Brand */}
         <div className="sidebar-brand">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-sm"
-                 style={{ background: 'linear-gradient(135deg, #2563EB, #1E40AF)' }}>
-              IQ
-            </div>
+            <img src="/logo.png" alt="InsightIQ Logo" className="w-9 h-9 object-contain rounded-xl" />
             <div>
               <div className="font-extrabold text-base tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
                 InsightIQ

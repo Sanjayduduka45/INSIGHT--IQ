@@ -48,17 +48,35 @@ async def get_forecastable_columns(dataset_id: str):
             "forecastable": [],
             "date_like_columns": date_like_cols,
             "message": "No valid time-series columns were found.",
+            "reason": "The dataset schema does not contain any detected datetime or temporal index columns.",
+            "required_fields": [
+                "A date/datetime column (e.g. order_date, transaction_date, timestamp)",
+                "At least one continuous numerical metric (e.g. sales, revenue, quantity)",
+                "At least 10 data records to fit multi-model trends"
+            ],
         }
 
     from core.df_utils import get_analytic_numeric_cols
     analytic_nums = get_analytic_numeric_cols(df, schema)
 
     results = detect_forecastable_columns(df, schema.date_columns[0], analytic_nums)
+    
+    reason = None
+    required_fields = []
+    if not results:
+        reason = f"The primary temporal index '{schema.date_columns[0]}' has fewer than 10 chronological data points, or metrics lack variation."
+        required_fields = [
+            "At least 10 unique time-series data intervals",
+            "Non-constant numeric metric values"
+        ]
+
     return {
         "dataset_id": dataset_id,
         "date_column": schema.date_columns[0],
         "forecastable": results,
         "date_like_columns": [],
+        "reason": reason,
+        "required_fields": required_fields
     }
 
 
@@ -103,9 +121,21 @@ async def run_forecast(
         horizons=horizon_list,
     )
 
+    reason = None
+    required_fields = []
+    if not results:
+        reason = "The selected time-series data points are insufficient (minimum 10 rows required) after grouping, or the data values are constant/blank."
+        required_fields = [
+            "At least 10 historical chronological records",
+            "Continuous numerical metric values (non-constant variance)"
+        ]
+
     return {
         "dataset_id": dataset_id,
         "metric": metric_col,
         "date_column": target_date_col,
         "forecasts": [asdict(r) for r in results],
+        "status": "success" if results else "failed",
+        "reason": reason,
+        "required_fields": required_fields
     }

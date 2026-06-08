@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { detectAnomalies } from '../lib/api'
 import { 
   AlertTriangle, AlertCircle, Info, ShieldAlert, 
-  Layers, Settings, BarChart2, Activity, HelpCircle
+  Layers, Settings, BarChart2, Activity
 } from 'lucide-react'
 import type { SafeAny, Anomaly } from '../types'
 

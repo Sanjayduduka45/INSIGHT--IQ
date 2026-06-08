@@ -374,17 +374,34 @@ async def get_customer_intelligence(dataset_id: str):
 
 
 @router.get("/{dataset_id}/charts")
-async def get_charts(dataset_id: str):
+async def get_charts(dataset_id: str, dashboard: Optional[str] = Query(None)):
     """Get recommended charts for a dataset."""
     ds = get_dataset_store().get(dataset_id)
     if not ds:
         raise HTTPException(404, "Dataset not found")
 
-    charts = recommend_charts(ds["df"], ds["schema"])
+    charts = recommend_charts(ds["df"], ds["schema"], dashboard=dashboard)
     return {
         "dataset_id": dataset_id,
         "charts": charts,
     }
+
+
+@router.post("/{dataset_id}/generate-custom-chart")
+async def get_custom_chart(
+    dataset_id: str,
+    type: str,
+    x_axis: Optional[str] = Query(None),
+    y_axis: Optional[str] = Query(None),
+):
+    """Generate a custom chart dynamically on-demand."""
+    ds = get_dataset_store().get(dataset_id)
+    if not ds:
+        raise HTTPException(404, "Dataset not found")
+
+    from analytics.charts import generate_custom_chart_data
+    chart = generate_custom_chart_data(ds["df"], ds["schema"], type, x_axis, y_axis)
+    return chart
 
 
 @router.get("/{dataset_id}/top-performers")

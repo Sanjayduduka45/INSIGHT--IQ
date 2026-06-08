@@ -136,7 +136,7 @@ def test_cold_start_recovery():
     response_get = client.get(f"/api/datasets/{dataset_id}")
     assert response_get.status_code == 200
     metadata = response_get.json()
-    assert metadata["name"] == f"{dataset_id}.csv"
+    assert metadata["name"] == "cold_start_test.csv"
     assert metadata["rows"] == 3
 
     # Confirm it was re-cached back into memory

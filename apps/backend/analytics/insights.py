@@ -195,11 +195,8 @@ def _compile_factual_summary(
 
 def _generate_gemini_report(facts: Dict[str, Any], settings: Any) -> Optional[Dict[str, Any]]:
     """Query Gemini with grounded parameters to construct a tailored C-Level report."""
-    from google import genai
-    from google.genai import types
     import json
-    
-    client = genai.Client(api_key=settings.google_api_key)
+    from core.gemini_utils import generate_content_with_gemini
     
     prompt = f"""You are a Senior Strategic Business Advisor and Data Architect.
 Review the following statistical facts compiled from our enterprise data:
@@ -229,27 +226,25 @@ Provide the output in JSON format with EXACTLY the following keys:
 
 Return ONLY the raw JSON block. Do not include markdown wraps like ```json."""
 
-    response = client.models.generate_content(
-        model=settings.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(
+    try:
+        text = generate_content_with_gemini(
+            prompt=prompt,
+            model_name=settings.gemini_model,
+            api_key=settings.google_api_key,
             response_mime_type="application/json",
             temperature=0.1
         )
-    )
-    
-    # Parse output safely
-    text = response.text.strip()
-    if text.startswith("```"):
-        text = text.replace("```json", "").replace("```", "").strip()
         
-    try:
+        # Parse output safely
+        if text.startswith("```"):
+            text = text.replace("```json", "").replace("```", "").strip()
+            
         parsed = json.loads(text)
         required_keys = ["summary", "summary_fields", "key_findings", "risks", "opportunities", "recommendations", "data_story"]
         if all(k in parsed for k in required_keys):
             return parsed
     except Exception as e:
-        logger.error(f"Failed to parse Gemini JSON output: {e}. Output was: {text}")
+        logger.error(f"Failed to parse or run Gemini executive report: {e}")
         
     return None
 
@@ -320,6 +315,10 @@ def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
         f"Leading category '{top_cat}' accounts for {top_cat_share}% contribution share." if top_cat != "N/A" else "Metric distributions are stable across category groupings.",
         facts["strongest_corr"] if facts["strongest_corr"] else f"Core metric clusters operate in tandem, suggesting unified channel drivers."
     ]
+    if top_region != "N/A":
+        findings.append(f"Geographic check isolates '{top_region}' as the dominant region contributing {top_region_share:.1f}% of totals.")
+    findings.append(f"Quality audit scores overall data integrity at {quality:.1f}% (Grade {facts.get('overall_quality_grade', 'A')}) with anomaly rate of {anomaly_rate:.1f}%.")
+    findings = findings[:5]
 
     # ── 4. RISKS ─────────────────────────────────────────────────────────────
     risks = []
@@ -332,19 +331,25 @@ def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
         risks.append(f"Outlier index is elevated at {anomaly_rate:.1f}%. Sudden variance in transactional volumes indicates leakage or operational friction.")
     else:
         risks.append("Outlier metrics are within tolerance, presenting negligible impact to current business forecasting.")
+    
+    risks.append(f"Variance check shows potential margin dilution under high discounts.")
+    risks = risks[:4]
 
     # ── 5. OPPORTUNITIES ─────────────────────────────────────────────────────
     opps = [
         f"Model forecasting indicates {domain} metrics have scalable trends. Shift marketing resources toward top categories.",
-        "Operational cost-saving can be realized by automating quality cleanup and removing duplicate entries."
-    ]
+        "Operational cost-saving can be realized by automating quality cleanup and removing duplicate entries.",
+        f"Design custom incentives for 'Potential Loyalists' to drive conversion rates.",
+        f"Optimize localized product arrays using regional category demand analytics."
+    ][:4]
 
     # ── 6. STRATEGIC RECOMMENDATIONS ─────────────────────────────────────────
     recs = [
         f"Establish a real-time monitor for '{kpi_name}' to trigger early warnings when volumes drop below the historical median.",
         "Enforce automated schema verification at the ingestion gate to correct spelling and formatting errors immediately.",
-        "Model future cashflows using the Forecast Center to optimize product procurement and workforce allocation."
-    ]
+        "Model future cashflows using the Forecast Center to optimize product procurement and workforce allocation.",
+        "Establish dynamic replenishment points to automate store shelf stocking."
+    ][:4]
 
     # ── 7. DATA STORYTELLING NARRATIVE ───────────────────────────────────────
     data_story = (
@@ -363,3 +368,4 @@ def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
         "recommendations": recs,
         "data_story": data_story
     }
+

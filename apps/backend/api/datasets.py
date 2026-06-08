@@ -71,10 +71,22 @@ def _ensure_dataset_loaded(dataset_id: str, user: dict) -> Optional[Dict[str, An
             logger.info(f"Cache miss: Reloading dataset {dataset_id} from {parquet_path}")
             df = pd.read_parquet(parquet_path)
             
-            # Check DB permission first if Supabase is active
-            supabase = _get_supabase_client(user)
+            # Load metadata from JSON cache if available
             filename = f"{dataset_id}.csv"
             domain_name = "Generic"
+            import json
+            meta_path = os.path.join(settings.upload_dir, f"{dataset_id}.json")
+            if os.path.exists(meta_path):
+                try:
+                    with open(meta_path, "r") as f:
+                        meta_data = json.load(f)
+                        filename = meta_data.get("name", filename)
+                        domain_name = meta_data.get("domain", domain_name)
+                except Exception as meta_err:
+                    logger.warning(f"Failed to read metadata JSON cache: {meta_err}")
+            
+            # Check DB permission first if Supabase is active
+            supabase = _get_supabase_client(user)
             if supabase:
                 try:
                     res = supabase.table("datasets").select("*").eq("id", dataset_id).execute()
@@ -227,8 +239,20 @@ async def upload_dataset(
             parquet_path = os.path.join(settings.upload_dir, f"{dataset_id}.parquet")
             df.to_parquet(parquet_path, index=False)
             logger.info(f"Saved dataset DataFrame locally to {parquet_path}")
+            
+            # Also save JSON metadata cache locally
+            import json
+            meta_path = os.path.join(settings.upload_dir, f"{dataset_id}.json")
+            with open(meta_path, "w") as f:
+                json.dump({
+                    "id": dataset_id,
+                    "user_id": user.get("id"),
+                    "name": filename,
+                    "domain": domain_result.domain
+                }, f)
+            logger.info(f"Saved dataset metadata locally to {meta_path}")
         except Exception as fs_err:
-            logger.error(f"Failed to save parquet cache locally: {fs_err}")
+            logger.error(f"Failed to save parquet or metadata cache locally: {fs_err}")
 
         # Store metadata in Supabase if authenticated
         supabase = _get_supabase_client(user)
@@ -449,15 +473,19 @@ async def delete_dataset(dataset_id: str, user: dict = Depends(get_current_user)
         except Exception as db_err:
             logger.error(f"Failed to delete dataset {dataset_id} from Supabase: {db_err}")
 
-    # Remove local parquet cache file
+    # Remove local parquet and JSON cache files
     try:
         settings = get_settings()
         parquet_path = os.path.join(settings.upload_dir, f"{dataset_id}.parquet")
         if os.path.exists(parquet_path):
             os.remove(parquet_path)
             logger.info(f"Deleted local parquet cache file {parquet_path}")
+        meta_path = os.path.join(settings.upload_dir, f"{dataset_id}.json")
+        if os.path.exists(meta_path):
+            os.remove(meta_path)
+            logger.info(f"Deleted local metadata cache file {meta_path}")
     except Exception as fs_err:
-        logger.error(f"Failed to delete local parquet cache file: {fs_err}")
+        logger.error(f"Failed to delete local cache files: {fs_err}")
 
     if dataset_id in _datasets:
         del _datasets[dataset_id]

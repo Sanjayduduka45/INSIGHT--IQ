@@ -203,11 +203,28 @@ def diagnose_root_causes(
         else:
             explanation = f"Primary metric '{metric}' shows baseline stability within normal tolerances."
             
+        narrative = explanation + " " + " ".join([d["description"] for d in ranked_causes])
+        decomp = [{"category": d["driver"], "contribution": d["contribution_pct"]} for d in ranked_causes]
+        tree = {
+            "name": f"Total {metric} Variance",
+            "value": f"{change_pct:+.1f}%",
+            "children": [
+                {
+                    "name": d["driver"],
+                    "value": f"{d['contribution_pct']}% share",
+                    "impact": d["impact_direction"]
+                } for d in ranked_causes
+            ]
+        }
+        
         causes.append({
             "metric": metric,
             "impact_direction": direction,
             "overall_change_pct": round(change_pct, 2),
             "explanation": explanation,
+            "executive_narrative": narrative,
+            "variance_decomposition": decomp,
+            "business_driver_tree": tree,
             "drivers": ranked_causes,
             "waterfall": waterfall_steps
         })
@@ -220,24 +237,236 @@ def diagnose_root_causes(
 
 
 def _fallback_diagnostics(df: pd.DataFrame, numeric_cols: List[str]) -> List[Dict[str, Any]]:
-    """Simple default diagnostic list if timeline/aggregations aren't possible."""
-    metric = numeric_cols[0] if numeric_cols else "Total Volume"
+    """Alternative diagnostics using correlation AND categorical analysis when timeline isn't possible.
+    
+    RULE: Never return empty drivers. Always provide actionable content.
+    """
+    from core.df_utils import get_categorical_cols
+    
+    if not numeric_cols:
+        # Even with no numerics, generate structural diagnostics
+        cat_cols = []
+        for col in df.columns:
+            if df[col].dtype == 'object' or df[col].dtype.name == 'category':
+                cat_cols.append(col)
+        
+        drivers = []
+        waterfall = [
+            {"name": "Total Records", "value": round(float(len(df)), 2)},
+        ]
+        
+        # Generate drivers from categorical value distributions
+        for col in cat_cols[:3]:
+            try:
+                vc = df[col].value_counts()
+                if len(vc) > 0:
+                    top_val = str(vc.index[0])
+                    top_count = int(vc.iloc[0])
+                    top_pct = round((top_count / len(df)) * 100, 1)
+                    drivers.append({
+                        "metric": "Record Distribution",
+                        "impact_direction": "stable",
+                        "driver": f"Category: {col}",
+                        "description": f"'{top_val}' is the dominant value in '{col}', accounting for {top_pct}% of all records ({top_count:,} entries).",
+                        "contribution_pct": top_pct,
+                        "confidence": 0.65
+                    })
+                    waterfall.append({
+                        "name": f"{col}: {top_val}",
+                        "value": round(float(top_count), 2)
+                    })
+            except Exception:
+                pass
+        
+        if not drivers:
+            drivers.append({
+                "metric": "Dataset Structure",
+                "impact_direction": "stable",
+                "driver": "Baseline Structural Analysis",
+                "description": f"Dataset contains {len(df):,} records across {len(df.columns)} columns. All structural metrics are within normal parameters.",
+                "contribution_pct": 100.0,
+                "confidence": 0.5
+            })
+        
+        waterfall.append({"name": "Total Volume", "value": round(float(len(df)), 2)})
+        
+        return [{
+            "metric": "Record Volume",
+            "impact_direction": "stable",
+            "overall_change_pct": 0.0,
+            "explanation": f"Dataset structural analysis: {len(df):,} records across {len(df.columns)} columns. Key categorical distributions analyzed below.",
+            "executive_narrative": f"With {len(df):,} records, the dataset shows stable structural properties. " + " ".join([d["description"] for d in drivers]),
+            "variance_decomposition": [{"category": d["driver"], "contribution": d["contribution_pct"]} for d in drivers],
+            "business_driver_tree": {"name": "Record Volume", "value": f"{len(df):,}", "children": [
+                {"name": d["driver"], "value": f"{d['contribution_pct']}% share", "impact": d["impact_direction"]} for d in drivers
+            ]},
+            "drivers": drivers,
+            "waterfall": waterfall
+        }]
+    
+    metric = numeric_cols[0]
+    total_sum = float(df[metric].sum()) if metric in df.columns else 0.0
+    
+    # ── Phase 1: Correlation-based drivers ────────────────────────────────
+    correlations = []
+    for col in numeric_cols[1:]:
+        if col in df.columns:
+            valid_df = df[[metric, col]].dropna()
+            if len(valid_df) > 1:
+                std_metric = valid_df[metric].std()
+                std_col = valid_df[col].std()
+                if std_metric > 0 and std_col > 0:
+                    corr = valid_df[metric].corr(valid_df[col])
+                    if not pd.isna(corr):
+                        correlations.append((col, corr))
+                        
+    # Sort by absolute correlation coefficient descending
+    correlations.sort(key=lambda x: abs(x[1]), reverse=True)
+    
+    drivers = []
+    waterfall = []
+    
+    # Waterfall starts at Baseline, and adds/subtracts step values based on correlation contribution
+    baseline = round(total_sum * 0.5, 2)
+    remaining = total_sum - baseline
+    
+    abs_corr_sum = sum(abs(c[1]) for c in correlations) if correlations else 0
+    
+    explanation_parts = []
+    explanation_parts.append(f"Diagnostic analysis of '{metric}' (total: {total_sum:,.1f}).")
+    
+    if correlations:
+        explanation_parts.append("Top contributing variables by correlation strength:")
+        for idx, (col, corr) in enumerate(correlations[:3]):
+            action = "up" if corr > 0 else "down"
+            direction_str = "positively" if corr > 0 else "negatively"
+            strength_str = "strong" if abs(corr) > 0.7 else "moderate" if abs(corr) > 0.4 else "weak"
+            
+            contrib_pct = (abs(corr) / abs_corr_sum * 100.0) if abs_corr_sum > 0 else 33.3
+            confidence = round(min(abs(corr) + 0.15, 0.95), 2)
+            
+            description = f"{col} has a {strength_str} {direction_str} correlation of {corr:.2f} with {metric}."
+            explanation_parts.append(f"{col} (r={corr:.2f})")
+            
+            drivers.append({
+                "metric": metric,
+                "impact_direction": action,
+                "driver": f"Numeric Driver: {col}",
+                "description": f"{idx+1}. {description} Contribution based on correlation is {contrib_pct:.1f}%.",
+                "contribution_pct": round(contrib_pct, 1),
+                "confidence": confidence
+            })
+            
+            val_change = remaining * (abs(corr) / abs_corr_sum) if abs_corr_sum > 0 else (remaining / min(len(correlations), 3))
+            if corr < 0:
+                val_change = -val_change
+            
+            waterfall.append({
+                "name": f"Corr: {col}",
+                "value": round(val_change, 2)
+            })
+    
+    # ── Phase 2: Categorical-based drivers (NEW) ─────────────────────────
+    # Even without correlations, analyze how metric distributes across categories
+    try:
+        # Try to get schema from the dataframe attributes or use raw detection
+        cat_cols_raw = [c for c in df.columns 
+                        if (df[c].dtype == 'object' or df[c].dtype.name == 'category')
+                        and df[c].nunique() <= max(50, len(df) * 0.5)]
+    except Exception:
+        cat_cols_raw = []
+    
+    if not correlations and cat_cols_raw:
+        explanation_parts.append("No numeric correlations found. Analyzing categorical distribution drivers:")
+        for idx, col in enumerate(cat_cols_raw[:3]):
+            try:
+                grouped = df.groupby(col)[metric].sum().sort_values(ascending=False)
+                if len(grouped) > 0 and total_sum > 0:
+                    top_val = str(grouped.index[0])
+                    top_amount = float(grouped.iloc[0])
+                    top_pct = (top_amount / total_sum) * 100
+                    
+                    drivers.append({
+                        "metric": metric,
+                        "impact_direction": "stable",
+                        "driver": f"Category Driver: {col}",
+                        "description": f"{idx+1}. '{top_val}' in '{col}' contributes {top_pct:.1f}% of total {metric} ({top_amount:,.1f}).",
+                        "contribution_pct": round(top_pct, 1),
+                        "confidence": 0.60
+                    })
+                    
+                    waterfall.append({
+                        "name": f"{col}: {top_val}",
+                        "value": round(top_amount * 0.5, 2)  # Proportional allocation
+                    })
+                    
+                    explanation_parts.append(f"{col} (top: {top_val} = {top_pct:.1f}%)")
+            except Exception:
+                pass
+    
+    # ── Phase 3: Always ensure at least one driver ───────────────────────
+    if not drivers:
+        # Statistical summary driver
+        if metric in df.columns:
+            mean_val = float(df[metric].mean())
+            std_val = float(df[metric].std()) if len(df[metric].dropna()) > 1 else 0
+            cv = (std_val / mean_val * 100) if mean_val != 0 else 0
+            
+            drivers.append({
+                "metric": metric,
+                "impact_direction": "stable",
+                "driver": "Statistical Profile",
+                "description": f"'{metric}' has mean {mean_val:,.1f}, std {std_val:,.1f} (CV={cv:.1f}%). No significant categorical or numeric co-drivers identified.",
+                "contribution_pct": 100.0,
+                "confidence": 0.5
+            })
+        else:
+            drivers.append({
+                "metric": metric,
+                "impact_direction": "stable",
+                "driver": "Baseline Stability",
+                "description": f"No secondary drivers correlated with '{metric}' were identified. Performance is within expected parameters.",
+                "contribution_pct": 100.0,
+                "confidence": 0.5
+            })
+        waterfall.append({
+            "name": "Unexplained Variance",
+            "value": round(remaining, 2)
+        })
+        
+    explanation = " ".join(explanation_parts)
+    
+    step_sum = sum(w["value"] for w in waterfall)
+    diff = round((total_sum - baseline) - step_sum, 2)
+    if diff != 0 and waterfall:
+        waterfall[-1]["value"] = round(waterfall[-1]["value"] + diff, 2)
+        
+    final_waterfall = [{"name": "Baseline Est.", "value": baseline}] + waterfall + [{"name": f"Total {metric}", "value": round(total_sum, 2)}]
+    
+    narrative = explanation + " " + " ".join([d["description"] for d in drivers])
+    decomp = [{"category": d["driver"], "contribution": d["contribution_pct"]} for d in drivers]
+    tree = {
+        "name": f"Diagnostic {metric} Drivers",
+        "value": f"{total_sum:,.1f}",
+        "children": [
+            {
+                "name": d["driver"],
+                "value": f"{d['contribution_pct']}% weight",
+                "impact": d["impact_direction"]
+            } for d in drivers
+        ]
+    }
+    
     return [{
         "metric": metric,
-        "impact_direction": "stable",
+        "impact_direction": "stable" if abs_corr_sum < 0.2 else "growth" if any(c[1] > 0 for c in correlations[:1]) else "decline",
         "overall_change_pct": 0.0,
-        "explanation": "Primary metric shows operational stability. No period-over-period structural shifts detected.",
-        "drivers": [{
-            "metric": metric,
-            "impact_direction": "stable",
-            "driver": "Baseline Stability",
-            "description": "Metric distribution conforms to normal standard deviations. Normal business conditions.",
-            "contribution_pct": 100.0,
-            "confidence": 0.7
-        }],
-        "waterfall": [
-            {"name": "Prior Period", "value": 10000.0},
-            {"name": "Operational Variance", "value": 0.0},
-            {"name": "Current Period", "value": 10000.0}
-        ]
+        "explanation": explanation,
+        "executive_narrative": narrative,
+        "variance_decomposition": decomp,
+        "business_driver_tree": tree,
+        "drivers": drivers,
+        "waterfall": final_waterfall
     }]
+
+

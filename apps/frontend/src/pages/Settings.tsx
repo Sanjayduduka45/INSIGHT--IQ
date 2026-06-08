@@ -1,211 +1,425 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Settings as SettingsIcon, Shield, Sparkles, Database, Save, CheckCircle, Activity, ServerCrash } from 'lucide-react'
-import { getInfrastructureStatus, testConnection } from '../lib/api'
+import { User, Bell, Sparkles, Download, LayoutGrid, CheckCircle, Save, Building } from 'lucide-react'
 
 export default function SettingsPage() {
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+  const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'ai' | 'notifications' | 'export'>('profile')
   const [saved, setSaved] = useState(false)
-  const [testResults, setTestResults] = useState<Record<string, { status: 'success' | 'error' | 'loading', message?: string }>>({})
 
-  // Fetch infrastructure status
-  const { data: statusData, isError } = useQuery({
-    queryKey: ['infrastructureStatus'],
-    queryFn: getInfrastructureStatus,
-    retry: false, // If it fails, likely 403 Forbidden (not admin)
+  // Profile State
+  const [profile, setProfile] = useState({
+    name: localStorage.getItem('user_name') || 'Sanjay Duduka',
+    email: localStorage.getItem('user_email') || 'sanjay@insightiq.ai',
+    role: 'Executive Director',
+    org: 'Enterprise Operations Inc.'
   })
 
-  
+  // Workspace State
+  const [workspace, setWorkspace] = useState({
+    name: localStorage.getItem('workspace_name') || 'Main Analytics Hub',
+    theme: localStorage.getItem('theme') || 'light',
+    timezone: 'UTC-05:00 Eastern Time',
+    language: 'en-US'
+  })
+
+  // AI Analyst State
+  const [aiSettings, setAiSettings] = useState({
+    personality: 'Executive Summaries',
+    model: 'Deep Analysis (Gemini Flash)',
+    maxTokens: '2048'
+  })
+
+  // Notifications State
+  const [notifications, setNotifications] = useState({
+    reportEmail: true,
+    anomalyAlerts: true,
+    weeklySummaries: false
+  })
+
+  // Export Settings State
+  const [exportPrefs, setExportPrefs] = useState({
+    pdfStyle: 'Corporate Navy',
+    widescreenPPT: true,
+    includeAppendix: true
+  })
 
   const handleSave = () => {
-    localStorage.setItem('theme', theme)
+    localStorage.setItem('user_name', profile.name)
+    localStorage.setItem('user_email', profile.email)
+    localStorage.setItem('workspace_name', workspace.name)
+    localStorage.setItem('theme', workspace.theme)
+    localStorage.setItem('language', workspace.language)
+    localStorage.setItem('timezone', workspace.timezone)
+    
+    // Apply theme changes to document element
+    if (workspace.theme === 'dark') {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }
 
-  const handleTest = async (service: 'ai' | 'database' | 'storage') => {
-    setTestResults(prev => ({ ...prev, [service]: { status: 'loading' } }))
-    try {
-      const res = await testConnection(service)
-      setTestResults(prev => ({ ...prev, [service]: { status: res.status, message: res.message } }))
-    } catch {
-      setTestResults(prev => ({ ...prev, [service]: { status: 'error', message: 'Connection Failed' } }))
-    }
-  }
-
   return (
-    <div className="animate-fade-in max-w-3xl mx-auto">
-      <div className="page-header mb-8">
-        <h1 className="page-title flex items-center gap-2">
-          <SettingsIcon className="text-blue-600" />
-          Platform Settings
+    <div className="animate-fade-in max-w-5xl mx-auto space-y-8">
+      {/* Page Header */}
+      <div className="page-header pb-4 border-b border-slate-200 dark:border-slate-800">
+        <h1 className="page-title text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <LayoutGrid className="text-blue-600" size={24} />
+          Settings & Preferences
         </h1>
-        <p className="page-subtitle">Configure application settings and monitor infrastructure health</p>
+        <p className="page-subtitle text-sm text-slate-505 dark:text-slate-400 mt-1">
+          Customize your profile, workspace settings, AI analyst, and export styling.
+        </p>
       </div>
 
-      <div className="space-y-6">
-        {/* Security Summary */}
-        <div className="card card-body bg-slate-50 border-slate-200">
-          <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
-            <Shield size={20} className="text-green-600" />
-            Security Posture
-          </h3>
-          <p className="text-sm text-slate-600 mb-4">
-            Secrets Managed Securely. No sensitive API keys or connection strings are exposed to the frontend. All credentials are encrypted and stored in backend environment variables.
-          </p>
-          <div className="text-xs text-slate-500 font-mono">
-            Last Security Check: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
-          </div>
-        </div>
-
-        {/* Infrastructure & AI (Only if loaded successfully) */}
-        {!isError && statusData && (
-          <>
-            {/* AI Services */}
-            <div className="card card-body">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold flex items-center gap-2">
-                  <Sparkles size={20} className="text-purple-600" />
-                  AI Services
-                </h3>
-              </div>
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-white">
-                <div>
-                  <div className="font-semibold text-slate-800">Gemini API</div>
-                  <div className="text-sm text-slate-500">Provider: {statusData?.ai?.provider}</div>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    {statusData?.ai?.connected ? (
-                      <span className="text-green-600 flex items-center gap-1"><CheckCircle size={14} /> Connected</span>
-                    ) : (
-                      <span className="text-amber-600 flex items-center gap-1"><Activity size={14} /> Fallback Model</span>
-                    )}
-                  </div>
-                  <button 
-                    onClick={() => handleTest('ai')}
-                    className="text-xs px-3 py-1.5 border rounded hover:bg-slate-50 transition-colors"
-                  >
-                    {testResults['ai']?.status === 'loading' ? 'Testing...' : 'Test Connection'}
-                  </button>
-                  {testResults['ai'] && testResults['ai'].status !== 'loading' && (
-                    <div className={`text-xs ${testResults['ai'].status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                      {testResults['ai'].message}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Infrastructure */}
-            <div className="card card-body">
-              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <Database size={20} className="text-blue-600" />
-                Infrastructure Status
-              </h3>
-              <div className="space-y-3">
-                {/* Database */}
-                <div className="flex items-center justify-between p-4 border rounded-lg bg-white">
-                  <div>
-                    <div className="font-semibold text-slate-800">Database</div>
-                    <div className="text-sm text-slate-500">Provider: {statusData?.database?.provider}</div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-                      <CheckCircle size={14} /> {statusData?.database?.status}
-                    </div>
-                    <button 
-                      onClick={() => handleTest('database')}
-                      className="text-xs px-3 py-1.5 border rounded hover:bg-slate-50 transition-colors"
-                    >
-                      {testResults['database']?.status === 'loading' ? 'Testing...' : 'Test Connection'}
-                    </button>
-                    {testResults['database'] && testResults['database'].status !== 'loading' && (
-                      <div className={`text-xs ${testResults['database'].status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                        {testResults['database'].message}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Storage */}
-                <div className="flex items-center justify-between p-4 border rounded-lg bg-white">
-                  <div>
-                    <div className="font-semibold text-slate-800">Storage</div>
-                    <div className="text-sm text-slate-500">Provider: {statusData?.storage?.provider}</div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="flex items-center gap-1.5 text-sm font-medium text-green-600">
-                      <CheckCircle size={14} /> {statusData?.storage?.status}
-                    </div>
-                    <button 
-                      onClick={() => handleTest('storage')}
-                      className="text-xs px-3 py-1.5 border rounded hover:bg-slate-50 transition-colors"
-                    >
-                      {testResults['storage']?.status === 'loading' ? 'Testing...' : 'Test Connection'}
-                    </button>
-                    {testResults['storage'] && testResults['storage'].status !== 'loading' && (
-                      <div className={`text-xs ${testResults['storage'].status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                        {testResults['storage'].message}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-
-        {isError && (
-          <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-100 flex items-start gap-3">
-            <ServerCrash size={20} className="mt-0.5" />
-            <div>
-              <div className="font-semibold">Infrastructure Access Denied</div>
-              <div className="text-sm">You do not have administrative privileges to view infrastructure settings.</div>
-            </div>
-          </div>
-        )}
-
-        {/* Preferences */}
-        <div className="card card-body">
-          <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <SettingsIcon size={20} className="text-slate-600" />
-            Preferences
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-1.5 text-slate-700">
-                Theme Mode
-              </label>
-              <select
-                value={theme}
-                onChange={e => setTheme(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              >
-                <option value="light">Light Mode (Fluent Default)</option>
-                <option value="dark">Dark Mode (Beta)</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center justify-between pt-4">
-          <div>
-            {saved && (
-              <span className="flex items-center gap-1.5 text-sm text-green-600 font-semibold animate-fade-in">
-                <CheckCircle size={16} />
-                Preferences saved successfully!
-              </span>
-            )}
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+        {/* Navigation Sidebar */}
+        <div className="flex flex-col gap-1.5 md:col-span-1">
           <button
-            onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-sm"
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+              activeTab === 'profile'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
           >
-            <Save size={16} />
-            Save Preferences
+            <User size={18} />
+            Profile & Account
           </button>
+          
+          <button
+            onClick={() => setActiveTab('workspace')}
+            className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+              activeTab === 'workspace'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Building size={18} />
+            Workspace & UI
+          </button>
+
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+              activeTab === 'ai'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Sparkles size={18} />
+            AI Analyst Options
+          </button>
+
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+              activeTab === 'notifications'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Bell size={18} />
+            Notifications
+          </button>
+
+          <button
+            onClick={() => setActiveTab('export')}
+            className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
+              activeTab === 'export'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Download size={18} />
+            Export Settings
+          </button>
+        </div>
+
+        {/* Configuration Panel */}
+        <div className="md:col-span-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-6">
+          
+          {/* PROFILE TAB */}
+          {activeTab === 'profile' && (
+            <div className="space-y-4 animate-fade-in">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <User className="text-blue-600" size={20} />
+                Profile & Corporate Account
+              </h3>
+              <p className="text-xs text-slate-500">Configure your user account credentials and enterprise title.</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Full Name</label>
+                  <input
+                    type="text"
+                    value={profile.name}
+                    onChange={e => setProfile({ ...profile, name: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Email Address</label>
+                  <input
+                    type="email"
+                    value={profile.email}
+                    onChange={e => setProfile({ ...profile, email: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Corporate Role</label>
+                  <input
+                    type="text"
+                    value={profile.role}
+                    onChange={e => setProfile({ ...profile, role: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Organization Name</label>
+                  <input
+                    type="text"
+                    value={profile.org}
+                    onChange={e => setProfile({ ...profile, org: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* WORKSPACE & UI TAB */}
+          {activeTab === 'workspace' && (
+            <div className="space-y-4 animate-fade-in">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Building className="text-blue-600" size={20} />
+                Workspace Settings
+              </h3>
+              <p className="text-xs text-slate-500">Configure theme, language preferences, and default workspace names.</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Workspace Hub Name</label>
+                  <input
+                    type="text"
+                    value={workspace.name}
+                    onChange={e => setWorkspace({ ...workspace, name: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Theme Mode</label>
+                  <select
+                    value={workspace.theme}
+                    onChange={e => setWorkspace({ ...workspace, theme: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="light">Light Mode (Fluent Classic)</option>
+                    <option value="dark">Dark Mode (Premium Executive)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Time Zone</label>
+                  <select
+                    value={workspace.timezone}
+                    onChange={e => setWorkspace({ ...workspace, timezone: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="UTC-05:00 Eastern Time">UTC-05:00 Eastern Time</option>
+                    <option value="UTC+00:00 GMT">UTC+00:00 GMT</option>
+                    <option value="UTC+05:30 India Time">UTC+05:30 India Time</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Language Format</label>
+                  <select
+                    value={workspace.language}
+                    onChange={e => setWorkspace({ ...workspace, language: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="en-US">English (United States) - Millions/Billions</option>
+                    <option value="en-IN">English (India) - Lakhs/Crores</option>
+                    <option value="en-GB">English (United Kingdom)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AI ANALYST TAB */}
+          {activeTab === 'ai' && (
+            <div className="space-y-4 animate-fade-in">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="text-purple-600" size={20} />
+                AI Analyst Configurations
+              </h3>
+              <p className="text-xs text-slate-500">Fine-tune recommendations detail level and context reasoning options.</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Analyst Personality</label>
+                  <select
+                    value={aiSettings.personality}
+                    onChange={e => setAiSettings({ ...aiSettings, personality: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="Executive Summaries">Executive Summaries (High Level)</option>
+                    <option value="Balanced Insights">Balanced Insights (Standard)</option>
+                    <option value="Technical/Detailed">Detailed Data Mining (Heavy Technical)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Reasoning Engine Model</label>
+                  <select
+                    value={aiSettings.model}
+                    onChange={e => setAiSettings({ ...aiSettings, model: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="Deep Analysis (Gemini Flash)">Deep Analysis (Gemini Flash)</option>
+                    <option value="Ultra Precision (Gemini Pro)">Ultra Precision (Gemini Pro)</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">Context Window Limit</label>
+                  <input
+                    type="range"
+                    min="1024"
+                    max="8192"
+                    step="1024"
+                    value={aiSettings.maxTokens}
+                    onChange={e => setAiSettings({ ...aiSettings, maxTokens: e.target.value })}
+                    className="w-full"
+                  />
+                  <div className="text-right text-xs text-slate-500 font-mono mt-1">{aiSettings.maxTokens} Context Tokens</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* NOTIFICATIONS TAB */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-4 animate-fade-in">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Bell className="text-orange-500" size={20} />
+                Notification Channels
+              </h3>
+              <p className="text-xs text-slate-500">Enable notification rules to alert you on anomalies and reports compilations.</p>
+              
+              <div className="space-y-3 pt-2">
+                <label className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifications.reportEmail}
+                    onChange={e => setNotifications({ ...notifications, reportEmail: e.target.checked })}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-white">Email compiled reports</div>
+                    <div className="text-xs text-slate-505 dark:text-slate-400">Receive a copy of generated PDF and PPTX decks directly in your inbox.</div>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifications.anomalyAlerts}
+                    onChange={e => setNotifications({ ...notifications, anomalyAlerts: e.target.checked })}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-white">Immediate anomaly alerts</div>
+                    <div className="text-xs text-slate-505 dark:text-slate-400">Alert on primary channel if consensus tests detect critical outliers in sales or volumes.</div>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={notifications.weeklySummaries}
+                    onChange={e => setNotifications({ ...notifications, weeklySummaries: e.target.checked })}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800 dark:text-white">Weekly health reviews</div>
+                    <div className="text-xs text-slate-505 dark:text-slate-400">Get a weekend roll-up of composite business scores and top category drivers.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* EXPORT SETTINGS TAB */}
+          {activeTab === 'export' && (
+            <div className="space-y-4 animate-fade-in">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Download className="text-green-600" size={20} />
+                Export Styling Configurations
+              </h3>
+              <p className="text-xs text-slate-505">Customize default cover layouts, margins, and report details.</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">PDF Theme Design</label>
+                  <select
+                    value={exportPrefs.pdfStyle}
+                    onChange={e => setExportPrefs({ ...exportPrefs, pdfStyle: e.target.value })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="Corporate Navy">Corporate Navy (McKinsey Style)</option>
+                    <option value="Minimalist Slate">Minimalist Slate (Modern Tech)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1 text-slate-700 dark:text-slate-300">PowerPoint Aspect Ratio</label>
+                  <select
+                    value={exportPrefs.widescreenPPT ? '16:9' : '4:3'}
+                    onChange={e => setExportPrefs({ ...exportPrefs, widescreenPPT: e.target.value === '16:9' })}
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                  >
+                    <option value="16:9">Widescreen Presentation (16:9)</option>
+                    <option value="4:3">Standard Slide Deck (4:3)</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-3 p-3 border border-slate-100 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportPrefs.includeAppendix}
+                      onChange={e => setExportPrefs({ ...exportPrefs, includeAppendix: e.target.checked })}
+                      className="rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-800 dark:text-white">Include schema profiling appendix</div>
+                      <div className="text-xs text-slate-505 dark:text-slate-400">Append row/column metadata counts, types, and validation details to final outputs.</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action Row */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div>
+              {saved && (
+                <span className="flex items-center gap-1.5 text-sm text-green-600 font-semibold animate-fade-in">
+                  <CheckCircle size={16} />
+                  Settings saved successfully!
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleSave}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-sm"
+            >
+              <Save size={16} />
+              Save Preferences
+            </button>
+          </div>
+
         </div>
       </div>
     </div>

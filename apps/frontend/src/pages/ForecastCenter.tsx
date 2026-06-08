@@ -2,12 +2,36 @@
  * InsightIQ — Forecast Center
  */
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getForecastableColumns, generateForecast } from '../lib/api'
 import { TrendingUp, Calendar } from 'lucide-react'
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, Legend } from 'recharts'
 import type { SafeAny } from '../types'
+
+function safeRender(value: any): React.ReactNode {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) {
+      return value.map((item, idx) => <span key={idx}>{safeRender(item)} </span>);
+    }
+    if ((value as any).$$typeof) {
+      return value;
+    }
+    if ((value as any).message) return String((value as any).message);
+    if ((value as any).error) return String((value as any).error);
+    if ((value as any).name) return String((value as any).name);
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return '[Object]';
+    }
+  }
+  return String(value);
+}
 
 interface Props {
   datasetId: string | null
@@ -72,7 +96,43 @@ export default function ForecastCenter({ datasetId }: Props) {
   }
   
   if (forecastLoading && !forecast) return <LoadingState text="Generating multi-model forecasts..." />
-  if (!forecast && !forecastLoading) return <div className="text-center py-20">Failed to generate forecast with selected parameters.</div>
+  
+  const forecastAny = forecast as any;
+  const hasForecast = forecastAny && forecastAny.status !== 'failed' && forecastAny.forecasts && forecastAny.forecasts.length > 0;
+
+  if (!hasForecast && !forecastLoading) {
+    const reason = forecastAny?.reason || "The selected time-series data points are insufficient (minimum 10 rows required) after grouping, or the data values are constant/blank.";
+    const required = forecastAny?.required_fields || [
+      "At least 10 historical chronological records",
+      "Continuous numerical metric values (non-constant variance)"
+    ];
+    return (
+      <div className="max-w-2xl mx-auto py-16 animate-fade-in">
+        <div className="card card-body border-slate-200">
+          <div className="flex items-center gap-3 text-amber-600 mb-4">
+            <Calendar size={32} />
+            <h3 className="text-lg font-bold">Forecasting Model Constraints</h3>
+          </div>
+          <p className="text-sm text-slate-600 mb-6 font-medium">
+            {safeRender(reason)}
+          </p>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              Required Fields & Verification Checklist:
+            </h4>
+            <ul className="space-y-2">
+              {required.map((req: string, idx: number) => (
+                <li key={idx} className="flex items-start gap-2.5 text-xs text-slate-600">
+                  <span className="text-blue-500 font-bold">•</span>
+                  <span>{safeRender(req)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // Use the API response metric if user hasn't selected one
   const currentMetric = selectedMetric || forecast?.metric || (forecastable?.forecastable?.[0] || '')
@@ -126,16 +186,16 @@ export default function ForecastCenter({ datasetId }: Props) {
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h3 className="font-bold text-lg mb-1" style={{ color: 'var(--color-text-primary)' }}>
-                  30-Day Outlook: {currentMetric}
+                  30-Day Outlook: {safeRender(currentMetric)}
                 </h3>
                 <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                  {activeForecast.interpretation}
+                  {safeRender(activeForecast.interpretation)}
                 </p>
               </div>
               <div className="flex gap-2">
-                <span className="badge badge-info">{(activeForecast.model_used || '').replace('_', ' ').toUpperCase()}</span>
+                <span className="badge badge-info">{safeRender((activeForecast.model_used || '').replace('_', ' ').toUpperCase())}</span>
                 <span className="badge" style={{ background: 'var(--color-surface-hover)' }}>
-                  {(activeForecast.confidence_level || 0).toFixed(0)}% Confidence
+                  {safeRender((activeForecast.confidence_level || 0).toFixed(0))}% Confidence
                 </span>
               </div>
             </div>
@@ -173,25 +233,25 @@ export default function ForecastCenter({ datasetId }: Props) {
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Model Selected</span>
                   <div className="text-base font-extrabold text-slate-800 mt-1 capitalize">
-                    {activeForecast.model_used.replace('_', ' ')}
+                    {safeRender((activeForecast.model_used || '').replace('_', ' '))}
                   </div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Mean Absolute Error (MAE)</span>
                   <div className="text-base font-extrabold text-slate-800 mt-1">
-                    {activeForecast.metrics.mae?.toLocaleString() || 'N/A'}
+                    {safeRender(activeForecast.metrics.mae?.toLocaleString() || 'N/A')}
                   </div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400">MAPE</span>
                   <div className="text-base font-extrabold text-slate-800 mt-1">
-                    {activeForecast.metrics.mape !== undefined ? `${activeForecast.metrics.mape}%` : 'N/A'}
+                    {safeRender(activeForecast.metrics.mape !== undefined ? `${activeForecast.metrics.mape}%` : 'N/A')}
                   </div>
                 </div>
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Coefficient of Determination (R²)</span>
                   <div className="text-base font-extrabold text-slate-800 mt-1">
-                    {activeForecast.metrics.r_squared !== undefined ? activeForecast.metrics.r_squared.toFixed(3) : 'N/A'}
+                    {safeRender(activeForecast.metrics.r_squared !== undefined ? activeForecast.metrics.r_squared.toFixed(3) : 'N/A')}
                   </div>
                 </div>
               </div>
@@ -218,18 +278,18 @@ function ForecastMetricCard({ forecast }: { forecast: SafeAny }) {
   return (
     <div className="card card-body">
       <div className="text-sm font-semibold mb-4 text-center" style={{ color: 'var(--color-text-secondary)' }}>
-        {forecast.horizon_days} Day Forecast
+        {safeRender(forecast.horizon_days)} Day Forecast
       </div>
       <div className="text-center mb-4">
         <div className="text-3xl font-extrabold mb-1" style={{ color: 'var(--color-text-primary)' }}>
-          {lastFore > 1000 ? `${(lastFore/1000).toFixed(1)}k` : lastFore.toFixed(2)}
+          {safeRender(lastFore > 1000 ? `${(lastFore/1000).toFixed(1)}k` : lastFore.toFixed(2))}
         </div>
         <div className="text-sm font-medium" style={{ color: isUp ? 'var(--color-success)' : 'var(--color-danger)' }}>
-          {isUp ? '↑' : '↓'} {Math.abs(pctChange).toFixed(1)}% vs today
+          {isUp ? '↑' : '↓'} {safeRender(Math.abs(pctChange).toFixed(1))}% vs today
         </div>
       </div>
       <div className="text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
-        Expected range: {forecast.forecast[forecast.forecast.length - 1]?.lower_bound?.toFixed(0)} - {forecast.forecast[forecast.forecast.length - 1]?.upper_bound?.toFixed(0)}
+        Expected range: {safeRender(forecast.forecast[forecast.forecast.length - 1]?.lower_bound?.toFixed(0))} - {safeRender(forecast.forecast[forecast.forecast.length - 1]?.upper_bound?.toFixed(0))}
       </div>
     </div>
   )

@@ -76,6 +76,7 @@ export interface OverviewData {
   root_cause_summary?: string;
   ai_recommendations?: string[];
   insights?: Insight[];
+  executive_intelligence?: SafeAny;
 }
 
 export interface TopPerformersData {

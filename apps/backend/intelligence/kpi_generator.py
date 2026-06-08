@@ -91,36 +91,102 @@ _DOMAIN_KPIS: Dict[str, List[Dict[str, Any]]] = {
     ],
     "Retail": [
         {
-            "name": "Average Basket Value",
-            "keywords": ["basket_value", "average_basket", "aov"],
+            "name": "Total Revenue",
+            "keywords": ["revenue", "sales", "amount", "total", "income"],
+            "agg": "sum",
+            "unit": "currency",
+            "icon": "💰",
+            "cat": "revenue",
+        },
+        {
+            "name": "Total Profit",
+            "keywords": ["profit", "margin", "earnings"],
+            "agg": "sum",
+            "unit": "currency",
+            "icon": "📈",
+            "cat": "revenue",
+        },
+        {
+            "name": "Profit Margin",
+            "keywords": ["margin", "profit_pct", "gross_margin", "profit_margin"],
+            "agg": "mean",
+            "unit": "percentage",
+            "icon": "📊",
+            "cat": "efficiency",
+        },
+        {
+            "name": "Total Customers",
+            "keywords": ["customer", "client", "buyer", "loyalty"],
+            "agg": "nunique",
+            "unit": "count",
+            "icon": "👥",
+            "cat": "growth",
+        },
+        {
+            "name": "Average Order Value (AOV)",
+            "keywords": ["basket_value", "average_basket", "aov", "revenue", "sales"],
             "agg": "mean",
             "unit": "currency",
             "icon": "🛒",
             "cat": "efficiency",
         },
         {
-            "name": "Gross Margin",
-            "keywords": ["margin", "gross_margin", "profit_margin"],
+            "name": "Retention Rate",
+            "keywords": ["retention", "retention_rate", "active_users"],
+            "agg": "mean",
+            "unit": "percentage",
+            "icon": "🛡️",
+            "cat": "quality",
+        },
+        {
+            "name": "Revenue Growth Rate",
+            "keywords": ["growth", "growth_rate"],
             "agg": "mean",
             "unit": "percentage",
             "icon": "📈",
-            "cat": "efficiency",
+            "cat": "growth",
         },
+    ],
+    "Telecom": [
         {
-            "name": "Sales Volume",
-            "keywords": ["quantity", "volume", "units_sold"],
-            "agg": "sum",
+            "name": "Subscriber Count",
+            "keywords": ["subscriber", "customer", "user_id", "phone_number"],
+            "agg": "nunique",
             "unit": "count",
-            "icon": "📦",
+            "icon": "👥",
             "cat": "growth",
         },
         {
-            "name": "Return Rate",
-            "keywords": ["return_rate", "refund_rate", "returns"],
+            "name": "Churn Rate",
+            "keywords": ["churn", "churn_rate", "left", "cancelled"],
             "agg": "mean",
             "unit": "percentage",
-            "icon": "🔄",
+            "icon": "📉",
             "cat": "risk",
+        },
+        {
+            "name": "Retention Rate",
+            "keywords": ["retention", "retention_rate", "active_users"],
+            "agg": "mean",
+            "unit": "percentage",
+            "icon": "🛡️",
+            "cat": "quality",
+        },
+        {
+            "name": "Avg Revenue Per User (ARPU)",
+            "keywords": ["arpu", "revenue", "sales", "charges", "bill_amount"],
+            "agg": "mean",
+            "unit": "currency",
+            "icon": "💰",
+            "cat": "revenue",
+        },
+        {
+            "name": "Lifetime Value (CLV)",
+            "keywords": ["clv", "ltv", "lifetime_value"],
+            "agg": "mean",
+            "unit": "currency",
+            "icon": "💎",
+            "cat": "revenue",
         },
     ],
     "Marketing": [
@@ -220,6 +286,14 @@ _DOMAIN_KPIS: Dict[str, List[Dict[str, Any]]] = {
             "agg": "nunique",
             "unit": "count",
             "icon": "👥",
+            "cat": "growth",
+        },
+        {
+            "name": "Units Sold",
+            "keywords": ["quantity", "qty", "volume", "units_sold", "units"],
+            "agg": "sum",
+            "unit": "count",
+            "icon": "📦",
             "cat": "growth",
         },
         {
@@ -502,6 +576,99 @@ _DOMAIN_KPIS: Dict[str, List[Dict[str, Any]]] = {
 }
 
 
+def _detect_currency(df: pd.DataFrame) -> str:
+    # Check columns
+    for col in df.columns:
+        col_lower = col.lower()
+        if any(k in col_lower for k in ["rupee", "inr", "rs", "₹", "crore", "lakh"]):
+            return "INR"
+    # Check if any values look like they are in lakhs/crores or state names (indicating India context)
+    for col in df.columns:
+        col_lower = col.lower()
+        if any(k in col_lower for k in ["state", "region", "country", "city"]):
+            try:
+                unique_vals = df[col].dropna().unique()
+                if any(any(ind in str(uv).lower() for ind in ["india", "andhra", "telangana", "delhi", "mumbai", "karnataka", "maharashtra", "goti", "rajasekhar"]) for uv in unique_vals):
+                    return "INR"
+            except Exception:
+                pass
+    return "USD"
+
+
+def normalize_kpi_name(name: str) -> str:
+    """Normalize technical KPI/column names to presentation-ready business titles."""
+    name_clean = name.replace("_", " ").strip()
+    
+    # Dictionary of direct keyword translations
+    translations = {
+        "unique pizza category": "Top Product Categories",
+        "unique pizza_category": "Top Product Categories",
+        "unique pizza size": "Distinct Size Options",
+        "unique pizza_size": "Distinct Size Options",
+        "unique pizza name id": "Unique Pizza Offerings",
+        "unique pizza_name_id": "Unique Pizza Offerings",
+        "total order id": "Total Orders",
+        "total order_id": "Total Orders",
+        "avg order id": "Average Order Value",
+        "avg order_id": "Average Order Value",
+        "unique order id": "Total Orders",
+        "unique order_id": "Total Orders",
+        "nunique order id": "Total Orders",
+        "nunique order_id": "Total Orders",
+        "total revenue": "Revenue Generated",
+        "total sales": "Revenue Generated",
+        "total amount": "Total Sales Value",
+        "avg revenue": "Average Order Value",
+        "avg sales": "Average Order Value",
+        "avg price": "Average Unit Price",
+        "avg quantity": "Average Items per Order",
+        "total quantity": "Total Volume Sold",
+        "total units": "Total Units Sold",
+        "total qty": "Total Volume Sold",
+        "avg qty": "Average Volume per Transaction",
+        "unique customer": "Customer Count",
+        "unique customer id": "Customer Count",
+        "unique customer_id": "Customer Count",
+        "nunique customer id": "Customer Count",
+        "nunique customer_id": "Customer Count",
+        "unique client": "Customer Count",
+        "nunique client": "Customer Count",
+        "unique user id": "Active User Count",
+        "nunique user id": "Active User Count",
+    }
+    
+    name_lower = name_clean.lower()
+    if name_lower in translations:
+        return translations[name_lower]
+        
+    # Pattern adjustments
+    if name_lower.startswith("total "):
+        col = name_clean[6:].strip()
+        if col.lower() in ["order id", "order_id", "transaction id", "transaction_id", "invoice id", "invoice_id"]:
+            return "Total Orders"
+        if any(kw in col.lower() for kw in ["id", "code", "key", "number", "num", "no"]):
+            return f"Unique References ({col.title()})"
+        return f"Total {col.title()}"
+        
+    if name_lower.startswith("avg ") or name_lower.startswith("average "):
+        col = name_clean[4:].strip() if name_lower.startswith("avg ") else name_clean[8:].strip()
+        if col.lower() in ["order id", "order_id", "transaction id", "transaction_id", "invoice id", "invoice_id"]:
+            return "Average Order Value"
+        if any(kw in col.lower() for kw in ["id", "code", "key", "number", "num", "no"]):
+            return f"Average Identifier ({col.title()})"
+        return f"Average {col.title()}"
+        
+    if name_lower.startswith("unique ") or name_lower.startswith("nunique "):
+        col = name_clean[7:].strip() if name_lower.startswith("unique ") else name_clean[8:].strip()
+        if any(kw in col.lower() for kw in ["category", "type", "class", "group"]):
+            return f"Top {col.title()} Categories"
+        if any(kw in col.lower() for kw in ["customer", "client", "buyer", "user"]):
+            return "Customer Count"
+        return f"Unique {col.title()}"
+        
+    return name_clean.title()
+
+
 def generate_kpis(
     df: pd.DataFrame,
     schema: DatasetSchema,
@@ -513,6 +680,7 @@ def generate_kpis(
     so that ID columns, constant columns, and non-numeric columns are excluded
     before any arithmetic operation.
     """
+    currency = _detect_currency(df)
     templates = _DOMAIN_KPIS.get(domain, [])
 
     # If domain not in templates, try to auto-generate from schema
@@ -521,20 +689,26 @@ def generate_kpis(
 
     kpis: List[KPI] = []
     for tmpl in templates:
-        kpi = _compute_kpi(df, schema, tmpl)
+        kpi = _compute_kpi(df, schema, tmpl, currency=currency)
         if kpi is not None:
             kpis.append(kpi)
 
     # If no KPIs generated, create fallback generic KPIs
     if not kpis:
-        kpis = _fallback_kpis(df, schema)
+        kpis = _fallback_kpis(df, schema, currency=currency)
 
     # Sort by priority
     kpis.sort(key=lambda k: k.priority)
+    
+    # Normalize KPI labels and descriptions
+    for kpi in kpis:
+        kpi.name = normalize_kpi_name(kpi.name)
+        kpi.description = f"{kpi.name} computed from dataset columns."
+        
     return kpis[:12]  # Max 12 KPIs
 
 
-def _compute_kpi(df: pd.DataFrame, schema: DatasetSchema, tmpl: dict) -> Optional[KPI]:
+def _compute_kpi(df: pd.DataFrame, schema: DatasetSchema, tmpl: dict, currency: str = "INR") -> Optional[KPI]:
     """Compute a single KPI from a template, skipping ID/non-numeric columns."""
     keywords = tmpl["keywords"]
     agg = tmpl["agg"]
@@ -579,7 +753,7 @@ def _compute_kpi(df: pd.DataFrame, schema: DatasetSchema, tmpl: dict) -> Optiona
     return KPI(
         name=tmpl["name"],
         value=value,
-        formatted_value=_format_value(value, tmpl["unit"]),
+        formatted_value=_format_value(value, tmpl["unit"], currency=currency),
         unit=tmpl["unit"],
         trend=trend,
         trend_value=trend_val,
@@ -632,25 +806,18 @@ def _compute_trend(series: pd.Series) -> tuple:
         return "stable", 0.0
 
 
-def _format_value(value: float, unit: str) -> str:
+def _format_value(value: float, unit: str, currency: str = "INR") -> str:
     """Format a KPI value for display."""
+    from core.formatters import format_currency_python, format_percent_python, format_compact_number_python
     if unit == "currency":
-        if abs(value) >= 1_000_000:
-            return f"${value / 1_000_000:,.1f}M"
-        elif abs(value) >= 1_000:
-            return f"${value / 1_000:,.1f}K"
-        return f"${value:,.2f}"
+        return format_currency_python(value, currency)
     elif unit == "percentage":
-        return f"{value:.1f}%"
+        return format_percent_python(value, is_fraction=False)
     elif unit == "count":
-        if abs(value) >= 1_000_000:
-            return f"{value / 1_000_000:,.1f}M"
-        elif abs(value) >= 1_000:
-            return f"{value / 1_000:,.1f}K"
-        return f"{value:,.0f}"
+        return format_compact_number_python(value)
     elif unit == "score":
         return f"{value:.2f}"
-    return f"{value:,.2f}"
+    return format_compact_number_python(value)
 
 
 def _priority_for_category(cat: str) -> int:
@@ -690,8 +857,17 @@ def _auto_generate_templates(df: pd.DataFrame, schema: DatasetSchema) -> List[di
             }
         )
 
-    for col_name in get_categorical_cols(df, schema)[:3]:
+    # Safely select categorical columns with domain/business value rather than raw IDs/codes/sizes
+    cat_kpis_added = 0
+    for col_name in get_categorical_cols(df, schema):
+        if cat_kpis_added >= 3:
+            break
         cl = col_name.lower()
+        skip_words = ["size", "id", "code", "key", "number", "no", "num"]
+        allow_words = ["customer", "client", "buyer", "user", "region", "country", "store", "product", "item", "category"]
+        if any(sw in cl for sw in skip_words) and not any(aw in cl for aw in allow_words):
+            continue
+
         templates.append(
             {
                 "name": f"Unique {col_name}",
@@ -702,11 +878,12 @@ def _auto_generate_templates(df: pd.DataFrame, schema: DatasetSchema) -> List[di
                 "cat": "growth",
             }
         )
+        cat_kpis_added += 1
 
     return templates
 
 
-def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema) -> List[KPI]:
+def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema, currency: str = "INR") -> List[KPI]:
     """Generate basic KPIs when no templates match.
 
     Includes categorical KPIs when no numeric columns are available.
@@ -717,7 +894,7 @@ def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema) -> List[KPI]:
         KPI(
             name="Total Records",
             value=float(len(df)),
-            formatted_value=f"{len(df):,}",
+            formatted_value=_format_value(float(len(df)), "count", currency=currency),
             unit="count",
             trend="stable",
             trend_value=0.0,
@@ -730,7 +907,7 @@ def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema) -> List[KPI]:
         KPI(
             name="Data Completeness",
             value=round((1 - df.isna().mean().mean()) * 100, 1),
-            formatted_value=f"{(1 - df.isna().mean().mean()) * 100:.1f}%",
+            formatted_value=_format_value(round((1 - df.isna().mean().mean()) * 100, 1), "percentage", currency=currency),
             unit="percentage",
             trend="stable",
             trend_value=0.0,
@@ -751,12 +928,17 @@ def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema) -> List[KPI]:
             val = float(series.sum())
         except Exception:
             continue
+            
+        # Check if the column name implies currency
+        is_curr_col = any(kw in col.lower() for kw in ["revenue", "sales", "spend", "amount", "total", "price", "cost", "value"])
+        unit_type = "currency" if is_curr_col else "count"
+        
         kpis.append(
             KPI(
                 name=f"Total {col}",
                 value=val,
-                formatted_value=_format_value(val, "count"),
-                unit="count",
+                formatted_value=_format_value(val, unit_type, currency=currency),
+                unit=unit_type,
                 trend="stable",
                 trend_value=0.0,
                 icon="📊",
@@ -767,15 +949,24 @@ def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema) -> List[KPI]:
             )
         )
 
-    # Categorical KPIs (unique value counts)
-    for col in get_categorical_cols(df, schema)[:3]:
+    # Categorical KPIs (unique value counts, filtered for core entities)
+    cat_kpis_added = 0
+    for col in get_categorical_cols(df, schema):
+        if cat_kpis_added >= 3:
+            break
+        cl = col.lower()
+        skip_words = ["size", "id", "code", "key", "number", "no", "num"]
+        allow_words = ["customer", "client", "buyer", "user", "region", "country", "store", "product", "item", "category"]
+        if any(sw in cl for sw in skip_words) and not any(aw in cl for aw in allow_words):
+            continue
+
         n_unique = int(df[col].nunique())
         most_common = str(df[col].mode().iloc[0]) if not df[col].mode().empty else "N/A"
         kpis.append(
             KPI(
                 name=f"Unique {col}",
                 value=float(n_unique),
-                formatted_value=f"{n_unique:,}",
+                formatted_value=_format_value(float(n_unique), "count", currency=currency),
                 unit="count",
                 trend="stable",
                 trend_value=0.0,
@@ -786,5 +977,6 @@ def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema) -> List[KPI]:
                 description=f"Number of unique {col} values. Most common: {most_common}",
             )
         )
+        cat_kpis_added += 1
 
     return kpis
