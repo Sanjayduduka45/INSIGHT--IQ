@@ -88,3 +88,4 @@ docs/_build/
 *.env
 **/.env
 uploads/
+INSIGHT--IQ/
