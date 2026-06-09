@@ -24,7 +24,8 @@ def generate_executive_report(
     schema: Any,
     quality: QualityReport,
     kpis: List[KPI],
-    domain: str
+    domain: str,
+    context: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Compile a business-grade executive report for C-level stakeholders."""
     
@@ -35,14 +36,14 @@ def generate_executive_report(
     settings = get_settings()
     if settings.has_gemini:
         try:
-            report = _generate_gemini_report(facts, settings)
+            report = _generate_gemini_report(facts, settings, context)
             if report:
                 return report
         except Exception as e:
             logger.warning(f"Gemini executive report generation failed: {e}. Falling back to template-based generator.")
             
     # ── 3. TEMPLATE-BASED PROFESSIONAL COMPILER (Ground Truth Fallback) ──────
-    return _generate_template_report(facts)
+    return _generate_template_report(facts, context)
 
 
 def _compile_factual_summary(
@@ -67,9 +68,9 @@ def _compile_factual_summary(
     cust_keywords = ["customer", "cust", "client", "member", "user", "buyer"]
     region_keywords = ["region", "state", "country", "city", "location", "area"]
     
-    rev_col = next((c for c in df.columns if any(kw in c.lower() for kw in rev_keywords)), None) or (nums[0] if nums else None)
-    profit_col = next((c for c in df.columns if any(kw in c.lower() for kw in profit_keywords)), None)
-    cat_col = next((c for c in df.columns if any(kw in c.lower() for kw in cat_keywords)), None) or (cats[0] if cats else None)
+    rev_col = next((c for c in nums if any(kw in c.lower() for kw in rev_keywords)), None) or (nums[0] if nums else None)
+    profit_col = next((c for c in nums if any(kw in c.lower() for kw in profit_keywords)), None)
+    cat_col = next((c for c in cats if any(kw in c.lower() for kw in cat_keywords)), None) or (cats[0] if cats else None)
     cust_col = next((c for c in df.columns if any(kw in c.lower() for kw in cust_keywords)), None)
     region_col = next((c for c in df.columns if any(kw in c.lower() for kw in region_keywords)), None)
 
@@ -193,17 +194,24 @@ def _compile_factual_summary(
     }
 
 
-def _generate_gemini_report(facts: Dict[str, Any], settings: Any) -> Optional[Dict[str, Any]]:
+def _generate_gemini_report(facts: Dict[str, Any], settings: Any, context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
     """Query Gemini with grounded parameters to construct a tailored C-Level report."""
     import json
     from core.gemini_utils import generate_content_with_gemini
     
     prompt = f"""You are a Senior Strategic Business Advisor and Data Architect.
+We are analyzing this dataset to address a specific business problem:
+- Business Problem: {context.get('business_problem') if context else 'N/A'}
+- Analysis Goal: {context.get('analysis_goal') if context else 'N/A'}
+- Primary Success Metric: {context.get('success_metric') if context else 'N/A'}
+
 Review the following statistical facts compiled from our enterprise data:
 
 {json.dumps(facts, indent=2)}
 
 Generate a premium, concise, business-focused Executive Report for senior leadership.
+Crucially: Customize the findings, risks, opportunities, recommendations, and summaries to align with the stated business problem and success metric. If the goal is Churn/Retention, do not prioritize overall sales expansion, but on loyalty, churn indicators, CLV, and customer behaviors. If the goal is Revenue Growth, focus on top-performing product categories, markets, and growth pathways.
+
 Provide the output in JSON format with EXACTLY the following keys:
 1. "summary" (string: 2-3 sentence strategic executive summary)
 2. "summary_fields" (nested object with EXACTLY the following string fields:
@@ -249,7 +257,7 @@ Return ONLY the raw JSON block. Do not include markdown wraps like ```json."""
     return None
 
 
-def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
+def _generate_template_report(facts: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Robust fallback template providing rich business reports when AI is offline."""
     
     domain = facts["domain"]
@@ -276,14 +284,29 @@ def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
     rev_formatted = f"${total_rev:,.0f}" if total_rev > 0 else "N/A"
     prof_formatted = f"${total_prof:,.0f}" if total_prof > 0 else "N/A"
     growth_formatted = f"{'+' if growth_rate >= 0 else ''}{growth_rate:.1f}% PoP"
+
+    goal = str(context.get("analysis_goal", "")).lower() if context else ""
+    prob = str(context.get("business_problem", "")).lower() if context else ""
+    
+    is_churn_retention = any(k in goal or k in prob for k in ["churn", "retention", "customer"])
+    is_marketing = any(k in goal or k in prob for k in ["marketing", "campaign", "ctr", "conversion", "roas"])
+    is_ops = any(k in goal or k in prob for k in ["operational", "operations", "supply", "efficiency", "cost", "shipment"])
     
     # ── 1. DYNAMIC SUMMARY ───────────────────────────────────────────────────
-    if trend == "up":
-        summary = f"The dataset indicates solid growth in key {domain} performance drivers. Primary metrics like '{kpi_name}' have expanded by {change:.1f}%, indicating positive market uptake and operational efficiency. Strategic investment should target scaling these successful operations."
-    elif trend == "down":
-        summary = f"Recent data shows contraction inside the {domain} portfolio. '{kpi_name}' has decreased by {change:.1f}%. Immediate tactical review is recommended to diagnose category margins and counter ongoing revenue leakage."
+    if is_churn_retention:
+        summary = f"The primary analysis objective is customer retention and churn reduction. Our data identifies key customer cohorts representing significant churn risks. Interventions must target at-risk groups to improve customer lifetime value (CLV)."
+    elif is_marketing:
+        summary = f"Analyzing marketing acquisition channels and campaign conversion rates. Performance skews indicate significant ROI variance across channels. Budget re-allocation is recommended to optimize overall ROAS."
+    elif is_ops:
+        summary = f"Assessing operational throughput, shipping cycle times, and process efficiency. Identified bottlenecks represent significant cost-saving opportunities through workflow automation and supplier audits."
     else:
-        summary = f"Performance metrics remain stable across {domain}. Operational parameters are running within expected thresholds. Focus should lie on optimization and safeguarding data collection integrity."
+        # Default/Revenue
+        if trend == "up":
+            summary = f"The dataset indicates solid growth in key {domain} performance drivers. Primary metrics like '{kpi_name}' have expanded by {change:.1f}%, indicating positive market uptake and operational efficiency. Strategic investment should target scaling these successful operations."
+        elif trend == "down":
+            summary = f"Recent data shows contraction inside the {domain} portfolio. '{kpi_name}' has decreased by {change:.1f}%. Immediate tactical review is recommended to diagnose category margins and counter ongoing revenue leakage."
+        else:
+            summary = f"Performance metrics remain stable across {domain}. Operational parameters are running within expected thresholds. Focus should lie on optimization and safeguarding data collection integrity."
 
     # ── 2. DYNAMIC SUMMARY FIELDS ────────────────────────────────────────────
     top_category_desc = f"{top_cat} contributes {top_cat_share}% of total volume" if top_cat != "N/A" else "Metric distributed evenly across categories"
@@ -295,6 +318,19 @@ def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
     
     forecast_outlook = f"Forecast suggests metric growth of {growth_rate:.1f}% next period." if growth_status == "growth" else f"Projecting temporary contraction of {abs(growth_rate):.1f}% next period."
     recommended_action = f"Optimize discount levels in '{top_cat}' to protect profitability margin." if top_cat != "N/A" else "Investigate operational channel efficiency metrics."
+    
+    if is_churn_retention:
+        biggest_risk = f"Elevated churn triggers observed in top segment '{top_cust or 'N/A'}'. CLV dilution is expected if repeat buy rates contract."
+        biggest_opportunity = "Implement targeted loyalty programs for high-value cohorts to boost purchase frequency."
+        recommended_action = f"Establish customer health scoring alerts on '{kpi_name}' activity drop-offs."
+    elif is_marketing:
+        biggest_risk = "Ad spend concentration in underperforming channels is eroding overall campaign ROI."
+        biggest_opportunity = "Reallocate budget from low-performing cohorts to high-CTR regional channels."
+        recommended_action = "A/B test ad creatives in top regions to stabilize acquisition costs."
+    elif is_ops:
+        biggest_risk = "Supply chain delays and cycle time bottlenecks are driving up shipping costs."
+        biggest_opportunity = "Automate inventory replenishment rules for top products in dominant regions."
+        recommended_action = "Renegotiate carrier contracts for high-volume routes to reduce transit costs."
 
     summary_fields = {
         "revenue": f"{rev_formatted} total sales value",
@@ -336,20 +372,66 @@ def _generate_template_report(facts: Dict[str, Any]) -> Dict[str, Any]:
     risks = risks[:4]
 
     # ── 5. OPPORTUNITIES ─────────────────────────────────────────────────────
-    opps = [
-        f"Model forecasting indicates {domain} metrics have scalable trends. Shift marketing resources toward top categories.",
-        "Operational cost-saving can be realized by automating quality cleanup and removing duplicate entries.",
-        f"Design custom incentives for 'Potential Loyalists' to drive conversion rates.",
-        f"Optimize localized product arrays using regional category demand analytics."
-    ][:4]
+    if is_churn_retention:
+        opps = [
+            "Implement customer retention incentives for at-risk cohorts to safeguard lifetime value.",
+            "Automate feedback loops when account activity decreases below historic thresholds.",
+            "Optimize support resource allocations to prioritize VIP customer issues.",
+            "Analyze repeat purchase timing to schedule automated reminders."
+        ]
+    elif is_marketing:
+        opps = [
+            "Scale budget in high-ROAS marketing campaigns to capture extra market share.",
+            "Optimize regional landing page speed to maximize conversion rate.",
+            "Refine customer demographic parameters based on top purchase skews.",
+            "Diversify advertising assets to combat ad fatigue in mature campaigns."
+        ]
+    elif is_ops:
+        opps = [
+            "Redistribute warehouse inventory to high-volume regions to trim cycle delays.",
+            "Establish automated replenishment points to optimize carrying costs.",
+            "Audit supplier lead-times to weed out underperforming logistics partners.",
+            "Implement batch-processing rules to speed up order fulfillment workflows."
+        ]
+    else:
+        opps = [
+            f"Model forecasting indicates {domain} metrics have scalable trends. Shift marketing resources toward top categories.",
+            "Operational cost-saving can be realized by automating quality cleanup and removing duplicate entries.",
+            f"Design custom incentives for 'Potential Loyalists' to drive conversion rates.",
+            f"Optimize localized product arrays using regional category demand analytics."
+        ]
+    opps = opps[:4]
 
     # ── 6. STRATEGIC RECOMMENDATIONS ─────────────────────────────────────────
-    recs = [
-        f"Establish a real-time monitor for '{kpi_name}' to trigger early warnings when volumes drop below the historical median.",
-        "Enforce automated schema verification at the ingestion gate to correct spelling and formatting errors immediately.",
-        "Model future cashflows using the Forecast Center to optimize product procurement and workforce allocation.",
-        "Establish dynamic replenishment points to automate store shelf stocking."
-    ][:4]
+    if is_churn_retention:
+        recs = [
+            f"Launch a personalized win-back discount campaign for the top segment '{top_cust or 'N/A'}'.",
+            "Establish a real-time churn early warning monitor triggering alerts on activity drop-offs.",
+            "Implement VIP loyalty bonuses for customers exceeding 3 consecutive purchases.",
+            "Address data quality discrepancies in customer ID and transaction logs."
+        ]
+    elif is_marketing:
+        recs = [
+            "Shift 15% of budget from underperforming channels into conversion-focused campaigns.",
+            "Conduct localized pricing audits in top regions to match competitor bids.",
+            "Establish closed-loop marketing attribution tracking for accurate ROI reporting.",
+            "Optimize ad spend limits relative to average customer acquisition cost (CAC)."
+        ]
+    elif is_ops:
+        recs = [
+            "Deploy safety inventory thresholds for high-demand category products.",
+            "Renegotiate route pricing with freight suppliers to trim operational costs.",
+            "Standardize batch sorting times at key fulfillment hubs.",
+            "Automate inventory audits using daily transaction logs."
+        ]
+    else:
+        recs = [
+            f"Establish a real-time monitor for '{kpi_name}' to trigger early warnings when volumes drop below the historical median.",
+            "Enforce automated schema verification at the ingestion gate to correct spelling and formatting errors immediately.",
+            "Model future cashflows using the Forecast Center to optimize product procurement and workforce allocation.",
+            "Establish dynamic replenishment points to automate store shelf stocking."
+        ]
+    recs = recs[:4]
 
     # ── 7. DATA STORYTELLING NARRATIVE ───────────────────────────────────────
     data_story = (

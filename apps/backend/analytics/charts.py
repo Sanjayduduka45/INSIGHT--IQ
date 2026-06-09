@@ -1412,7 +1412,16 @@ def generate_custom_chart_data(
     x_axis: Optional[str] = None,
     y_axis: Optional[str] = None
 ) -> Dict[str, Any]:
-    from core.df_utils import get_analytic_numeric_cols, get_categorical_cols
+    from core.df_utils import get_analytic_numeric_cols, get_categorical_cols, _is_id_col
+
+    # Validate against identifier/ID columns
+    if x_axis and x_axis in df.columns:
+        if _is_id_col(x_axis, df[x_axis]):
+            raise ValueError(f"Cannot generate chart for identifier or ID column: '{x_axis}'")
+            
+    if y_axis and y_axis in df.columns:
+        if _is_id_col(y_axis, df[y_axis]):
+            raise ValueError(f"Cannot generate chart for identifier or ID column: '{y_axis}'")
     
     num_cols = get_analytic_numeric_cols(df, schema)
     cat_cols = get_categorical_cols(df, schema)
@@ -1748,4 +1757,49 @@ def generate_custom_chart_data(
             "data": fallback_data,
             "insight": f"Intelligent fallback activated: Columns mapping error was resolved automatically. Ingested completeness shown for {len(fallback_data)} fields."
         }
+
+
+def customize_charts_by_context(
+    charts: List[Dict[str, Any]],
+    df: pd.DataFrame,
+    schema: DatasetSchema,
+    context: Dict[str, Any],
+    dashboard: Optional[str] = None
+) -> List[Dict[str, Any]]:
+    """Customize, reorder, and filter generated charts based on active business context without cross-dashboard contamination."""
+    goal = str(context.get("analysis_goal", "")).lower()
+    prob = str(context.get("business_problem", "")).lower()
+    metric = str(context.get("success_metric", "")).lower()
+
+    is_churn_retention = any(k in goal or k in prob or k in metric for k in ["churn", "retention", "customer"])
+    is_revenue = any(k in goal or k in prob or k in metric for k in ["revenue", "sales", "profit", "earnings", "income", "price"])
+    is_marketing = any(k in goal or k in prob or k in metric for k in ["marketing", "campaign", "ctr", "conversion", "roas", "ad"])
+    is_ops = any(k in goal or k in prob or k in metric for k in ["operational", "operations", "supply", "efficiency", "cost", "shipment", "downtime", "defect", "yield"])
+
+    boosted_charts = []
+    for c in charts:
+        c_copy = dict(c)
+        title_lower = c_copy.get("title", "").lower()
+        insight_lower = c_copy.get("insight", "").lower()
+        boost = 0.0
+        
+        if is_churn_retention:
+            if any(k in title_lower or k in insight_lower for k in ["churn", "retention", "customer", "cohort", "loyalty", "rfm"]):
+                boost += 50.0
+        if is_revenue:
+            if any(k in title_lower or k in insight_lower for k in ["revenue", "sales", "profit", "earnings", "income", "margin"]):
+                boost += 50.0
+        if is_marketing:
+            if any(k in title_lower or k in insight_lower for k in ["marketing", "campaign", "ctr", "conversion", "roas", "ad", "clicks", "impressions"]):
+                boost += 50.0
+        if is_ops:
+            if any(k in title_lower or k in insight_lower for k in ["operational", "operations", "efficiency", "downtime", "defect", "yield", "cycle", "throughput"]):
+                boost += 50.0
+                
+        c_copy["relevance_score"] = c_copy.get("relevance_score", 50.0) + boost
+        boosted_charts.append(c_copy)
+        
+    boosted_charts.sort(key=lambda x: x.get("relevance_score", 50.0), reverse=True)
+    return boosted_charts[:6]
+
 

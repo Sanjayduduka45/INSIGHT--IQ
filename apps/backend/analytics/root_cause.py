@@ -29,6 +29,21 @@ class RootCause:
     confidence: float
 
 
+def to_native_types(obj: Any) -> Any:
+    """Recursively convert numpy and pandas types to native Python types."""
+    if isinstance(obj, dict):
+        return {k: to_native_types(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [to_native_types(x) for x in obj]
+    elif hasattr(obj, "item") and callable(getattr(obj, "item")):
+        return obj.item()
+    elif isinstance(obj, np.ndarray):
+        return to_native_types(obj.tolist())
+    elif pd.isna(obj):
+        return None
+    return obj
+
+
 def diagnose_root_causes(
     df: pd.DataFrame,
     schema: Any,
@@ -60,7 +75,7 @@ def diagnose_root_causes(
     
     # If no date column, we can use simple record splits, but let's assume we have dates
     if not (schema.date_columns and numeric_cols and len(df) >= 8):
-        return _fallback_diagnostics(df, numeric_cols)
+        return to_native_types(_fallback_diagnostics(df, numeric_cols))
 
     date_col = schema.date_columns[0]
     metric = numeric_cols[0]  # Let's diagnose the primary numeric metric (e.g. Sales/Revenue)
@@ -231,9 +246,9 @@ def diagnose_root_causes(
 
     except Exception as e:
         logger.error(f"Root cause diagnostics failed: {e}", exc_info=True)
-        return _fallback_diagnostics(df, numeric_cols)
+        return to_native_types(_fallback_diagnostics(df, numeric_cols))
         
-    return causes
+    return to_native_types(causes)
 
 
 def _fallback_diagnostics(df: pd.DataFrame, numeric_cols: List[str]) -> List[Dict[str, Any]]:

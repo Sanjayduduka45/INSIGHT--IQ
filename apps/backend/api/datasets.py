@@ -74,6 +74,7 @@ def _ensure_dataset_loaded(dataset_id: str, user: dict) -> Optional[Dict[str, An
             # Load metadata from JSON cache if available
             filename = f"{dataset_id}.csv"
             domain_name = "Generic"
+            context = None
             import json
             meta_path = os.path.join(settings.upload_dir, f"{dataset_id}.json")
             if os.path.exists(meta_path):
@@ -82,6 +83,7 @@ def _ensure_dataset_loaded(dataset_id: str, user: dict) -> Optional[Dict[str, An
                         meta_data = json.load(f)
                         filename = meta_data.get("name", filename)
                         domain_name = meta_data.get("domain", domain_name)
+                        context = meta_data.get("context", None)
                 except Exception as meta_err:
                     logger.warning(f"Failed to read metadata JSON cache: {meta_err}")
             
@@ -115,6 +117,7 @@ def _ensure_dataset_loaded(dataset_id: str, user: dict) -> Optional[Dict[str, An
                 "quality": quality,
                 "kpis": kpis,
                 "user_id": user.get("id"),
+                "context": context,
             }
             return _datasets[dataset_id]
         except Exception as e:
@@ -437,7 +440,49 @@ async def get_dataset(dataset_id: str, user: dict = Depends(get_current_user)):
                 for c in ds["schema"].columns
             ],
         },
+        "context": ds.get("context", None),
     }
+
+
+from pydantic import BaseModel
+
+class DatasetContextUpdate(BaseModel):
+    business_problem: str
+    analysis_goal: str
+    success_metric: str
+
+@router.post("/{dataset_id}/context")
+async def update_dataset_context(
+    dataset_id: str,
+    payload: DatasetContextUpdate,
+    user: dict = Depends(get_current_user),
+):
+    """Update active business context for a dataset."""
+    ds = _ensure_dataset_loaded(dataset_id, user)
+    if not ds:
+        raise HTTPException(404, "Dataset not found")
+
+    import json
+    context_data = payload.model_dump()
+    ds["context"] = context_data
+
+    # Save to local JSON metadata cache
+    try:
+        settings = get_settings()
+        meta_path = os.path.join(settings.upload_dir, f"{dataset_id}.json")
+        meta_data = {}
+        if os.path.exists(meta_path):
+            with open(meta_path, "r") as f:
+                meta_data = json.load(f)
+        meta_data["context"] = context_data
+        with open(meta_path, "w") as f:
+            json.dump(meta_data, f)
+        logger.info(f"Successfully saved context for dataset {dataset_id} in JSON cache.")
+    except Exception as fs_err:
+        logger.error(f"Failed to update dataset context JSON cache: {fs_err}")
+
+    return {"status": "success", "context": ds["context"]}
+
 
 
 @router.get("/{dataset_id}/preview")

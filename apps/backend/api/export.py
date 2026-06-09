@@ -74,11 +74,19 @@ async def export_pdf(dataset_id: str, user: dict = Depends(get_current_user)):
     schema = ds["schema"]
     quality = ds["quality"]
     domain = ds["domain"].domain
-    raw_kpis = ds.get("kpis", [])
+    context = ds.get("context")
+
+    # Generate context-driven KPIs
+    if context:
+        from intelligence.kpi_generator import generate_context_driven_kpis
+        raw_kpis = generate_context_driven_kpis(df, schema, domain, context)
+    else:
+        raw_kpis = ds.get("kpis", [])
+
     kpis = [asdict(k) for k in raw_kpis]
-    insights = _generate_insights(df, schema, raw_kpis, domain)
+    insights = _generate_insights(df, schema, raw_kpis, domain, context)
     health_scores = compute_explainable_health_score(df, schema, quality, raw_kpis)
-    executive_intel = generate_executive_report(df, schema, quality, raw_kpis, domain)
+    executive_intel = generate_executive_report(df, schema, quality, raw_kpis, domain, context)
 
     try:
         pdf_bytes = generate_executive_pdf(
@@ -121,11 +129,19 @@ async def export_ppt(dataset_id: str, user: dict = Depends(get_current_user)):
     schema = ds["schema"]
     quality = ds["quality"]
     domain = ds["domain"].domain
-    raw_kpis = ds.get("kpis", [])
+    context = ds.get("context")
+
+    # Generate context-driven KPIs
+    if context:
+        from intelligence.kpi_generator import generate_context_driven_kpis
+        raw_kpis = generate_context_driven_kpis(df, schema, domain, context)
+    else:
+        raw_kpis = ds.get("kpis", [])
+
     kpis = [asdict(k) for k in raw_kpis]
-    insights = _generate_insights(df, schema, raw_kpis, domain)
+    insights = _generate_insights(df, schema, raw_kpis, domain, context)
     health_scores = compute_explainable_health_score(df, schema, quality, raw_kpis)
-    executive_intel = generate_executive_report(df, schema, quality, raw_kpis, domain)
+    executive_intel = generate_executive_report(df, schema, quality, raw_kpis, domain, context)
 
     try:
         ppt_bytes = generate_executive_ppt(
@@ -135,7 +151,8 @@ async def export_ppt(dataset_id: str, user: dict = Depends(get_current_user)):
             df=df,
             schema=schema,
             health_scores=health_scores,
-            executive_intel=executive_intel
+            executive_intel=executive_intel,
+            context=context
         )
         import zipfile
         if not ppt_bytes or not zipfile.is_zipfile(io.BytesIO(ppt_bytes)):

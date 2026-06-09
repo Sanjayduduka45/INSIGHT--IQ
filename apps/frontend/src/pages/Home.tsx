@@ -223,19 +223,50 @@ function InsightCard({ insight }: { insight: SafeAny }) {
     info: 'var(--color-info)',
   }
 
+  const hasFourParts = !!(insight.observation || insight.evidence || insight.business_impact || insight.recommendation)
 
   return (
-    <div className="card card-body">
+    <div className="card card-body hover:shadow-md transition-shadow">
       <div className="flex items-start gap-3">
-        <div className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
+        <div className="w-2.5 h-2.5 rounded-full mt-2 flex-shrink-0"
              style={{ background: colors[insight.severity] || 'var(--color-info)' }} />
-        <div>
-          <div className="font-semibold text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>
-            {insight.title}
-          </div>
-          <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            {insight.description}
-          </div>
+        <div className="flex-1 min-w-0">
+          {hasFourParts ? (
+            <div className="space-y-3">
+              <div className="font-bold text-sm" style={{ color: 'var(--color-text-primary)', fontSize: '0.95rem' }}>
+                {insight.observation || insight.title}
+              </div>
+              <div className="grid gap-2 text-xs border-t pt-3" style={{ borderColor: 'var(--color-border-light)' }}>
+                {insight.evidence && (
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase tracking-wider block mb-0.5" style={{ fontSize: '0.65rem' }}>Data Evidence</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{insight.evidence}</span>
+                  </div>
+                )}
+                {insight.business_impact && (
+                  <div>
+                    <span className="font-bold text-slate-500 uppercase tracking-wider block mb-0.5" style={{ fontSize: '0.65rem' }}>Business Impact</span>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>{insight.business_impact}</span>
+                  </div>
+                )}
+                {insight.recommendation && (
+                  <div className="mt-1 p-2 rounded-lg bg-emerald-50/50 border border-emerald-100/30">
+                    <span className="font-bold text-emerald-600 uppercase tracking-wider block mb-0.5" style={{ fontSize: '0.65rem' }}>Action Recommendation</span>
+                    <span className="font-medium text-emerald-800">{insight.recommendation}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="font-semibold text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>
+                {insight.title}
+              </div>
+              <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                {insight.description}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

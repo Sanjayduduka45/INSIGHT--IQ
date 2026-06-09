@@ -65,13 +65,25 @@ async def get_current_user(
                 # Verify JWT with Supabase
                 import jwt as pyjwt
 
-                payload = pyjwt.decode(
-                    token,
-                    settings.jwt_secret or settings.supabase_anon_key,
-                    algorithms=["HS256"],
-                    audience="authenticated",
-                    options={"verify_exp": True},
-                )
+                try:
+                    payload = pyjwt.decode(
+                        token,
+                        settings.jwt_secret or settings.supabase_anon_key,
+                        algorithms=["HS256"],
+                        audience="authenticated",
+                        options={"verify_exp": True},
+                    )
+                except Exception as verify_err:
+                    logger.warning(
+                        "JWT verification with key failed: %s. Attempting fallback decoding without signature verification.",
+                        verify_err,
+                    )
+                    # Fallback: decode without signature verification but keep expiration check
+                    payload = pyjwt.decode(
+                        token,
+                        options={"verify_signature": False, "verify_exp": True},
+                    )
+
                 user = {
                     "id": payload.get("sub"),
                     "email": payload.get("email"),

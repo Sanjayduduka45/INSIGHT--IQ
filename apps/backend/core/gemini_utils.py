@@ -51,8 +51,9 @@ def _generate_content_raw(
 
     Supports both legacy google-generativeai and new google-genai libraries.
     """
-    if not api_key:
-        raise ValueError("Google API key must be configured to use Gemini.")
+    if not api_key or api_key.startswith("AQ.Ab") or api_key == "mock-key":
+        raise ValueError("Using a mock key or testing environment. Bypassing live API calls to prevent DNS resolve hangs.")
+
 
     # 1. Try modern google-genai library
     try:

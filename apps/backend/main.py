@@ -67,22 +67,47 @@ app = FastAPI(
 # ── Global Exception Handler ─────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch all unhandled exceptions, log them securely, and return a user-friendly error."""
-    error_context = {
-        "event": "unhandled_exception",
-        "method": request.method,
-        "url": str(request.url),
-        "error_type": type(exc).__name__,
-        "error_msg": str(exc),
-    }
-    # Log structured data internally (in a real app, this goes to Datadog/ELK)
-    logger.error("Unhandled Exception: %s", error_context, exc_info=True)
+    """Catch all unhandled exceptions, log them securely, and return a user-friendly error with CORS headers."""
+    from fastapi import HTTPException as FastAPIHTTPException
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from fastapi.exceptions import RequestValidationError
+
+    # Determine status code and content based on exception type
+    if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
+        status_code = exc.status_code
+        content = {"detail": exc.detail}
+    elif isinstance(exc, RequestValidationError):
+        status_code = 422
+        content = {"detail": exc.errors()}
+    else:
+        status_code = 500
+        content = {
+            "detail": "An unexpected error occurred while processing your request. Our team has been notified."
+        }
+        error_context = {
+            "event": "unhandled_exception",
+            "method": request.method,
+            "url": str(request.url),
+            "error_type": type(exc).__name__,
+            "error_msg": str(exc),
+        }
+        logger.error("Unhandled Exception: %s", error_context, exc_info=True)
+
+    # Reconstruct CORS headers manually for the exception response
+    headers = {}
+    origin = request.headers.get("origin")
+    if origin:
+        allowed_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+        if "*" in allowed_origins or origin in allowed_origins:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+            headers["Access-Control-Allow-Methods"] = "*"
+            headers["Access-Control-Allow-Headers"] = "*"
 
     return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "An unexpected error occurred while processing your request. Our team has been notified."
-        },
+        status_code=status_code,
+        content=content,
+        headers=headers,
     )
 
 

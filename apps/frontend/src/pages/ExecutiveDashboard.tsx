@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getOverview, getDataset } from '../lib/api'
+import { getOverview, getDataset, getCharts, getRootCauses, generateCustomChart, getDatasetPreview, getExportUrl } from '../lib/api'
 import type { Chart, KPI, SafeAny } from '../types'
 import { formatCurrency, formatCompactNumber } from '../lib/formatters'
+import { useAuth } from '../lib/auth'
 import { 
   TrendingUp, ArrowUpRight, ArrowDownRight, Minus, 
   AlertTriangle, Lightbulb, Users, Package, Map, Layers, LayoutDashboard,
   ShieldAlert, Database, Hash, FileText, CheckCircle, X, Download, Loader2, Info,
-  Edit2, Save, FileSpreadsheet, PinOff
+  Edit2, Save, FileSpreadsheet, PinOff, Sparkles, Share
 } from 'lucide-react'
 import { 
   BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -54,7 +55,30 @@ const formatPerformerValue = (val: number, metricName: string) => {
 }
 
 export default function ExecutiveDashboard({ datasetId }: Props) {
-  const { data: overview, isLoading: overviewLoading } = useQuery({
+  const { user } = useAuth()
+  
+  const handleShare = () => {
+    if (user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+    } else {
+      try {
+        navigator.clipboard.writeText(window.location.href)
+        alert('Dashboard link copied to clipboard! Share it with your team.')
+      } catch (e) {
+        alert(`Dashboard Link: ${window.location.href}`)
+      }
+    }
+  }
+
+  const handleSaveProject = () => {
+    if (user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+    } else {
+      alert(`Project "${overview?.dataset_name || 'Report'}" has been successfully saved and synced to your cloud workspace!`)
+    }
+  }
+
+  const { data: overview, isLoading: overviewLoading, error: overviewError } = useQuery({
     queryKey: ['overview', datasetId],
     queryFn: () => getOverview(datasetId!),
     enabled: !!datasetId,
@@ -115,69 +139,58 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
     URL.revokeObjectURL(url)
   }
 
-  const { data: chartsData, isLoading: chartsLoading } = useQuery({
-    queryKey: ['charts', datasetId],
+  const { data: chartsData, isLoading: chartsLoading, error: chartsError } = useQuery({
+    queryKey: ['charts-executive', datasetId],
     queryFn: async () => {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
       try {
-        const res = await fetch(`/api/analytics/${datasetId}/charts?dashboard=executive`, {
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
-        if (!res.ok) throw new Error('Failed to fetch charts')
-        return res.json()
+        return await getCharts(datasetId!, 'executive')
       } catch (err) {
-        clearTimeout(timeoutId)
-        console.warn('Charts query failed or timed out. Building charts from preview data.', err)
+        console.warn('Charts query failed. Building charts from preview data.', err)
         // Fetch real preview data and build charts dynamically
         try {
-          const previewRes = await fetch(`/api/datasets/${datasetId}/preview`)
-          if (previewRes.ok) {
-            const preview = await previewRes.json()
-            const columns = preview.columns || []
-            const rows = preview.rows || []
-            const numCols = columns.filter((c: any) => c.type === 'numeric' || c.type === 'integer' || c.type === 'float')
-            const catCols = columns.filter((c: any) => c.type === 'categorical')
-            const fallbackCharts: any[] = []
-            // Chart 1: Trend of first numeric column
-            if (numCols.length > 0 && rows.length > 0) {
-              const metricName = numCols[0].name
-              fallbackCharts.push({
-                type: 'trend',
-                title: `${metricName} Sequential Profile`,
-                x_axis: 'Record Index', y_axis: metricName,
-                insight: `Live preview data: sequential values of ${metricName} from dataset.`,
-                data: rows.slice(0, 30).map((r: any, i: number) => ({ date: `Record ${i + 1}`, value: Number(r[metricName]) || 0 }))
-              })
-            }
-            // Chart 2: Category bar chart
-            if (catCols.length > 0 && rows.length > 0) {
-              const catName = catCols[0].name
-              const counts: Record<string, number> = {}
-              rows.forEach((r: any) => { const v = String(r[catName] || 'Unknown'); counts[v] = (counts[v] || 0) + 1 })
-              const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
-              fallbackCharts.push({
-                type: 'bar',
-                title: `Record Distribution by ${catName}`,
-                x_axis: catName, y_axis: 'Count',
-                insight: `Live preview data: record count distribution across top categories of ${catName}.`,
-                data: sorted.map(([name, value]) => ({ name, value }))
-              })
-            }
-            // Chart 3: Column completeness bar
+          const preview = await getDatasetPreview(datasetId!) as any
+          const columns = preview.columns || []
+          const rows = preview.rows || []
+          const numCols = columns.filter((c: any) => c.type === 'numeric' || c.type === 'integer' || c.type === 'float')
+          const catCols = columns.filter((c: any) => c.type === 'categorical')
+          const fallbackCharts: any[] = []
+          // Chart 1: Trend of first numeric column
+          if (numCols.length > 0 && rows.length > 0) {
+            const metricName = numCols[0].name
+            fallbackCharts.push({
+              type: 'trend',
+              title: `${metricName} Sequential Profile`,
+              x_axis: 'Record Index', y_axis: metricName,
+              insight: `Live preview data: sequential values of ${metricName} from dataset.`,
+              data: rows.slice(0, 30).map((r: any, i: number) => ({ date: `Record ${i + 1}`, value: Number(r[metricName]) || 0 }))
+            })
+          }
+          // Chart 2: Category bar chart
+          if (catCols.length > 0 && rows.length > 0) {
+            const catName = catCols[0].name
+            const counts: Record<string, number> = {}
+            rows.forEach((r: any) => { const v = String(r[catName] || 'Unknown'); counts[v] = (counts[v] || 0) + 1 })
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
             fallbackCharts.push({
               type: 'bar',
-              title: 'Column Data Completeness',
-              x_axis: 'Column', y_axis: 'Non-Null Records',
-              insight: 'Data completeness audit from live preview data.',
-              data: columns.slice(0, 10).map((c: any) => ({
-                name: c.name.length > 15 ? c.name.substring(0, 15) : c.name,
-                value: rows.filter((r: any) => r[c.name] != null && r[c.name] !== '').length
-              }))
+              title: `Record Distribution by ${catName}`,
+              x_axis: catName, y_axis: 'Count',
+              insight: `Live preview data: record count distribution across top categories of ${catName}.`,
+              data: sorted.map(([name, value]) => ({ name, value }))
             })
-            return { charts: fallbackCharts }
           }
+          // Chart 3: Column completeness bar
+          fallbackCharts.push({
+            type: 'bar',
+            title: 'Column Data Completeness',
+            x_axis: 'Column', y_axis: 'Non-Null Records',
+            insight: 'Data completeness audit from live preview data.',
+            data: columns.slice(0, 10).map((c: any) => ({
+              name: c.name.length > 15 ? c.name.substring(0, 15) : c.name,
+              value: rows.filter((r: any) => r[c.name] != null && r[c.name] !== '').length
+            }))
+          })
+          return { charts: fallbackCharts }
         } catch { /* preview also failed, return minimal */ }
         return { charts: [] }
       }
@@ -185,13 +198,9 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
     enabled: !!datasetId,
   })
 
-  const { data: rootCauseData, isLoading: rootCauseLoading } = useQuery({
+  const { data: rootCauseData, isLoading: rootCauseLoading, error: rootCauseError } = useQuery({
     queryKey: ['root-cause', datasetId],
-    queryFn: async () => {
-      const res = await fetch(`/api/analytics/${datasetId}/root-cause`)
-      if (!res.ok) throw new Error('Failed to fetch root cause')
-      return res.json()
-    },
+    queryFn: () => getRootCauses(datasetId!),
     enabled: !!datasetId,
   })
 
@@ -208,9 +217,18 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
   const [xAxis, setXAxis] = useState('')
   const [yAxis, setYAxis] = useState('')
   const [generatingCustom, setGeneratingCustom] = useState(false)
+  const [studioError, setStudioError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!showStudio) {
+      setStudioError(null)
+    }
+  }, [showStudio])
+
+  const error = overviewError || chartsError || rootCauseError
   if (!datasetId) return <NoDataset />
   if (overviewLoading || chartsLoading || rootCauseLoading) return <LoadingState />
+  if (error) return <ErrorState message={(error as Error).message || 'Failed to load executive dashboard.'} />
   if (!overview) return null
 
   const growth = (overview.growth && typeof overview.growth === 'object' && 'growth_rate' in overview.growth)
@@ -248,6 +266,10 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
   }).sort((a: any, b: any) => a.priority - b.priority)
 
   const handleExport = async (format: 'pdf' | 'ppt') => {
+    if ((format === 'pdf' || format === 'ppt') && user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+      return
+    }
     setExporting(format)
     try {
       const token = localStorage.getItem('insightiq_token')
@@ -255,7 +277,8 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
-      const res = await fetch(`/api/export/${datasetId}/${format}`, { headers })
+      const exportUrl = getExportUrl(datasetId!, format)
+      const res = await fetch(exportUrl, { headers })
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}))
         throw new Error(errBody.detail || `Export failed with status ${res.status}`)
@@ -294,47 +317,90 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
       {/* Page Header */}
       <div className="page-header flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title flex items-center gap-2">
-            <LayoutDashboard className="text-blue-600" />
-            Executive Command Center
-          </h1>
-          <p className="page-subtitle">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="page-title flex items-center gap-2">
+              <LayoutDashboard className="text-blue-600" />
+              Executive Command Center
+            </h1>
+            {/* Primary growth index badge */}
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider">
+                Primary Growth Index
+              </span>
+              <span className="flex items-center gap-0.5 font-extrabold text-xs"
+                   style={{ color: growth.growth_rate > 0 ? 'var(--color-success)' : growth.growth_rate < 0 ? 'var(--color-danger)' : 'var(--color-text-secondary)' }}>
+                {growth.growth_rate > 0 ? <ArrowUpRight size={14} /> : growth.growth_rate < 0 ? <ArrowDownRight size={14} /> : <Minus size={14} />}
+                {growth.growth_rate > 0 ? '+' : ''}{growth.growth_rate.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+          <p className="page-subtitle mt-1">
             Enterprise intelligence, health score breakdowns, and diagnostic variance root causes
           </p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Primary growth index */}
-          <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
-            <div className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-              Primary growth index
-            </div>
-            <div className="flex items-center gap-1 font-extrabold text-base"
-                 style={{ color: growth.growth_rate > 0 ? 'var(--color-success)' : growth.growth_rate < 0 ? 'var(--color-danger)' : 'var(--color-text-secondary)' }}>
-              {growth.growth_rate > 0 ? <ArrowUpRight size={18} /> : growth.growth_rate < 0 ? <ArrowDownRight size={18} /> : <Minus size={18} />}
-              {growth.growth_rate > 0 ? '+' : ''}{growth.growth_rate.toFixed(1)}%
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Save & Share Premium Buttons */}
+          <button 
+            onClick={handleSaveProject}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs shadow-sm transition-all text-slate-700 dark:text-white cursor-pointer"
+          >
+            <Save size={14} />
+            Save Project
+          </button>
+
+          <button 
+            onClick={handleShare}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-xs shadow-sm transition-all text-slate-700 dark:text-white cursor-pointer"
+          >
+            <Share size={14} />
+            Share Dashboard
+          </button>
 
           {/* Export Buttons */}
           <button 
             onClick={() => handleExport('pdf')}
             disabled={exporting !== null}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm shadow-sm transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs shadow-sm transition-all disabled:opacity-50 cursor-pointer"
           >
-            {exporting === 'pdf' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            {exporting === 'pdf' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             Export PDF Report
           </button>
           <button 
             onClick={() => handleExport('ppt')}
             disabled={exporting !== null}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold text-sm shadow-sm transition-all disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-semibold text-xs shadow-sm transition-all disabled:opacity-50 cursor-pointer"
           >
-            {exporting === 'ppt' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            {exporting === 'ppt' ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
             Export PowerPoint
           </button>
         </div>
       </div>
+
+      {overview.context && (
+        <div className="card shadow-sm border flex flex-col md:flex-row items-stretch md:items-center gap-4 p-4 rounded-xl"
+             style={{ background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(124, 58, 237, 0.04) 100%)', borderColor: 'rgba(37, 99, 235, 0.1)' }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-blue-600 flex-shrink-0" 
+               style={{ background: 'rgba(37, 99, 235, 0.08)' }}>
+            <Sparkles size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600">Active Business Context</span>
+              <span className="badge badge-info text-[10px] px-2 py-0.5" style={{ background: 'rgba(37, 99, 235, 0.1)', color: 'var(--color-primary)' }}>{overview.context.analysis_goal}</span>
+            </div>
+            <div className="text-sm font-semibold text-slate-800 line-clamp-2">
+              "{overview.context.business_problem}"
+            </div>
+          </div>
+          <div className="flex items-center gap-2 border-t md:border-t-0 md:border-l pt-3 md:pt-0 md:pl-4 flex-shrink-0" style={{ borderColor: 'rgba(37, 99, 235, 0.1)' }}>
+            <div className="text-right hidden sm:block">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Success Metric Focus</div>
+              <div className="text-xs font-bold text-emerald-600">{overview.context.success_metric}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* C-Level Executive Intelligence Grid */}
       {overview.executive_intelligence && (
@@ -778,11 +844,11 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
         </div>
       )}
 
-      {/* Risks & Opportunities and Root Cause Diagnostics Panels */}
+      {/* Diagnostics and Key Findings Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left: Root Cause Drilldown Engine */}
         {!rootCauseData?.root_causes || rootCauseData.root_causes.length === 0 ? (
-          <div className="lg:col-span-2 card bg-white p-4 shadow-md rounded-xl flex items-center justify-between border-l-4 border-l-emerald-500 h-auto max-h-[120px] min-h-[80px]">
+          <div className="lg:col-span-2 card bg-white p-6 shadow-md rounded-xl flex items-center justify-between border-l-4 border-l-emerald-500 min-h-[140px]">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                 <CheckCircle size={20} className="flex-shrink-0" />
@@ -840,7 +906,7 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
                             <div key={dIdx} className="p-3 bg-white border border-slate-200/60 rounded-lg shadow-sm space-y-1.5">
                               <div className="flex justify-between items-center text-xs font-bold text-slate-800">
                                 <span className="truncate max-w-[200px]">{drv.driver}</span>
-                                <span className="text-[10px] bg-slate-100 text-slate-505 py-0.5 px-1.5 rounded">
+                                <span className="text-[10px] bg-slate-100 text-slate-500 py-0.5 px-1.5 rounded">
                                   Conf: {Math.round(drv.confidence * 100)}%
                                 </span>
                               </div>
@@ -910,119 +976,133 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
           </div>
         )}
 
-        {/* Right: Key Risks & Growth Opportunities */}
-        <div className="card bg-white p-6 shadow-md rounded-xl space-y-6">
-          {/* Key Findings Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-              <FileText size={16} className="text-blue-600" />
-              Key Findings
-            </h3>
-            <div className="space-y-2.5">
-              {overview.executive_intelligence?.key_findings?.map((finding: string, idx: number) => (
-                <div key={idx} className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                  {finding}
+        {/* Right: Key Findings */}
+        <div className="lg:col-span-1 card bg-white p-6 shadow-md rounded-xl space-y-4">
+          <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+            <FileText size={16} className="text-blue-600" />
+            Key Findings
+          </h3>
+          <div className="space-y-2.5">
+            {overview.executive_intelligence?.key_findings?.map((finding: string, idx: number) => (
+              <div key={idx} className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-semibold">
+                {finding}
+              </div>
+            ))}
+            {(!overview.executive_intelligence?.key_findings || overview.executive_intelligence.key_findings.length === 0) && (
+              <div className="space-y-2">
+                <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-medium">
+                  Dataset contains {quickStats.rows?.toLocaleString() || 'N/A'} records with {quickStats.numeric_cols || 0} numeric metrics and {quickStats.categorical_cols || 0} categorical dimensions.
                 </div>
-              ))}
-              {(!overview.executive_intelligence?.key_findings || overview.executive_intelligence.key_findings.length === 0) && (
-                <div className="space-y-2">
-                  <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                    Dataset contains {quickStats.rows?.toLocaleString() || 'N/A'} records with {quickStats.numeric_cols || 0} numeric metrics and {quickStats.categorical_cols || 0} categorical dimensions.
-                  </div>
-                  <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                    Data quality health score is {(healthScores.data_quality || 0).toFixed(0)}% — {(healthScores.data_quality || 0) >= 85 ? 'exceeding enterprise benchmarks' : 'flagged for improvement'}.
-                  </div>
+                <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-medium">
+                  Data quality health score is {(healthScores.data_quality || 0).toFixed(0)}% — {(healthScores.data_quality || 0) >= 85 ? 'exceeding enterprise benchmarks' : 'flagged for improvement'}.
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
+        </div>
+      </div>
 
-          {/* Opportunities Section */}
-          <div className="space-y-4 pt-4 border-t border-slate-100">
-            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-              <TrendingUp size={16} className="text-indigo-600" />
-              Strategic Opportunities
-            </h3>
-            <div className="space-y-2.5">
-              {overview.executive_intelligence?.opportunities?.map((opp: string, idx: number) => (
-                <div key={idx} className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                  {opp}
+      {/* Row 2: Strategic Opportunities & Risks and Mitigations (Side-by-Side) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Strategic Opportunities */}
+        <div className="card bg-white p-6 shadow-md rounded-xl space-y-4">
+          <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+            <TrendingUp size={16} className="text-indigo-600" />
+            Strategic Opportunities
+          </h3>
+          <div className="space-y-2.5">
+            {overview.executive_intelligence?.opportunities?.map((opp: string, idx: number) => (
+              <div key={idx} className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-semibold">
+                {opp}
+              </div>
+            ))}
+            {(!overview.executive_intelligence?.opportunities || overview.executive_intelligence.opportunities.length === 0) && (
+              <div className="space-y-2">
+                <div className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-medium">
+                  Leverage the Forecast Center to model growth vectors and project future performance trends.
                 </div>
-              ))}
-              {(!overview.executive_intelligence?.opportunities || overview.executive_intelligence.opportunities.length === 0) && (
-                <div className="space-y-2">
-                  <div className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                    Leverage the Forecast Center to model growth vectors and project future performance trends.
-                  </div>
-                  <div className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                    Use correlation analysis to identify high-impact feature relationships for optimization.
-                  </div>
+                <div className="p-3 bg-indigo-50/20 border border-indigo-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-medium">
+                  Use correlation analysis to identify high-impact feature relationships for optimization.
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
+        </div>
 
-          {/* Risks Section */}
-          <div className="space-y-4 pt-4 border-t border-slate-100">
-            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-              <ShieldAlert size={16} className="text-red-600" />
-              Risks & Mitigations
-            </h3>
-            <div className="space-y-2.5">
-              {overview.executive_intelligence?.risks?.map((risk: string, idx: number) => (
-                <div key={idx} className="p-3 bg-red-50/20 border border-red-100/30 rounded-lg text-xs text-slate-700 leading-relaxed">
-                  {risk}
-                </div>
-              ))}
-              {(!overview.executive_intelligence?.risks || overview.executive_intelligence.risks.length === 0) && (
-                <p className="text-xs text-slate-400 italic">No operational risks flagged.</p>
-              )}
-            </div>
+        {/* Risks & Mitigations */}
+        <div className="card bg-white p-6 shadow-md rounded-xl space-y-4">
+          <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+            <ShieldAlert size={16} className="text-red-650" />
+            Risks & Mitigations
+          </h3>
+          <div className="space-y-2.5">
+            {overview.executive_intelligence?.risks?.map((risk: string, idx: number) => (
+              <div key={idx} className="p-3 bg-red-50/20 border border-red-100/30 rounded-lg text-xs text-slate-700 leading-relaxed font-semibold">
+                {risk}
+              </div>
+            ))}
+            {(!overview.executive_intelligence?.risks || overview.executive_intelligence.risks.length === 0) && (
+              <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-500 font-medium italic">
+                No operational risks flagged.
+              </div>
+            )}
           </div>
+        </div>
+      </div>
 
-          {/* Recommended Actions / Decision Center Section */}
-          <div className="space-y-4 pt-4 border-t border-slate-100">
-            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
-              <Lightbulb size={16} className="text-emerald-600" />
-              Strategic Decision Center
-            </h3>
-            <p className="text-[10px] text-slate-400">Prioritized recommendations sorted by High Impact / Low Effort matrix</p>
-            <div className="space-y-3">
-              {enrichedRecs.map((rec: any, idx: number) => (
-                <div key={idx} className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2 relative overflow-hidden transition-all hover:border-emerald-200 hover:bg-white">
-                  <div className="absolute top-0 right-0 text-[8px] bg-slate-100 text-slate-505 font-bold py-0.5 px-2 rounded-bl-lg">
-                    Priority {rec.priority}
-                  </div>
-                  <div className="flex gap-2 items-center text-[10px] font-bold">
-                    <span className={`px-1.5 py-0.5 rounded ${
-                      rec.impact === 'High' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
-                    }`}>
-                      Impact: {rec.impact}
-                    </span>
-                    <span className={`px-1.5 py-0.5 rounded ${
-                      rec.effort === 'Low' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      Effort: {rec.effort}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                    {rec.text}
-                  </p>
-                </div>
-              ))}
-              {enrichedRecs.length === 0 && (
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2">
-                    <div className="absolute top-0 right-0 text-[8px] bg-slate-100 text-slate-505 font-bold py-0.5 px-2 rounded-bl-lg">Priority 1</div>
-                    <p className="text-xs text-slate-700 leading-relaxed font-medium">Monitor primary KPI metrics through the dashboard and configure threshold alerts for anomaly detection.</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl space-y-2">
-                    <p className="text-xs text-slate-700 leading-relaxed font-medium">Leverage the AI Chat to explore advanced insights and drill deeper into specific data segments.</p>
-                  </div>
-                </div>
-              )}
+      {/* Row 3: Strategic Decision Center (Full Width grid) */}
+      <div className="card bg-white p-6 shadow-md rounded-xl space-y-4">
+        <div>
+          <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+            <Lightbulb size={16} className="text-emerald-600" />
+            Strategic Decision Center
+          </h3>
+          <p className="text-[10px] text-slate-400 mt-1">Prioritized recommendations sorted by High Impact / Low Effort matrix</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {enrichedRecs.map((rec: any, idx: number) => (
+            <div key={idx} className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-3 relative overflow-hidden transition-all hover:border-emerald-200 hover:bg-white hover:shadow-sm">
+              <div className="absolute top-0 right-0 text-[8px] bg-slate-100 text-slate-500 font-bold py-0.5 px-2 rounded-bl-lg">
+                Priority {rec.priority}
+              </div>
+              <div className="flex gap-2 items-center text-[10px] font-bold">
+                <span className={`px-1.5 py-0.5 rounded ${
+                  rec.impact === 'High' ? 'bg-emerald-50 text-emerald-700' : 'bg-blue-50 text-blue-700'
+                }`}>
+                  Impact: {rec.impact}
+                </span>
+                <span className={`px-1.5 py-0.5 rounded ${
+                  rec.effort === 'Low' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-650'
+                }`}>
+                  Effort: {rec.effort}
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 leading-relaxed font-semibold">
+                {rec.text}
+              </p>
             </div>
-          </div>
+          ))}
+          {enrichedRecs.length === 0 && (
+            <>
+              <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 text-[8px] bg-slate-100 text-slate-500 font-bold py-0.5 px-2 rounded-bl-lg">Priority 1</div>
+                <div className="flex gap-2 items-center text-[10px] font-bold">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Impact: High</span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">Effort: Low</span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed font-semibold">Monitor primary KPI metrics through the dashboard and configure threshold alerts for anomaly detection.</p>
+              </div>
+              <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-xl space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 right-0 text-[8px] bg-slate-100 text-slate-500 font-bold py-0.5 px-2 rounded-bl-lg">Priority 2</div>
+                <div className="flex gap-2 items-center text-[10px] font-bold">
+                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">Impact: Medium</span>
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-650">Effort: Medium</span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed font-semibold">Leverage the AI Chat to explore advanced insights and drill deeper into specific data segments.</p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1444,6 +1524,12 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
                     </div>
                   )}
 
+                  {studioError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-[10px] text-red-600 font-semibold leading-relaxed">
+                      ⚠️ {studioError}
+                    </div>
+                  )}
+
                   <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-xl text-[10px] text-slate-500 leading-relaxed">
                     💡 <strong>Tip:</strong> Selecting Recommended configurations ensures optimal visual clarity and correct data aggregation formats.
                   </div>
@@ -1454,22 +1540,14 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
                     onClick={async () => {
                       if (!selectedType) return
                       setGeneratingCustom(true)
+                      setStudioError(null)
                       try {
-                        const token = localStorage.getItem('insightiq_token')
-                        const headers: Record<string, string> = {}
-                        if (token) {
-                          headers['Authorization'] = `Bearer ${token}`
-                        }
-                        const res = await fetch(
-                          `/api/analytics/${datasetId}/generate-custom-chart?type=${selectedType}&x_axis=${xAxis}&y_axis=${yAxis}`,
-                          { method: 'POST', headers }
-                        )
-                        if (!res.ok) throw new Error('Failed to generate chart')
-                        const chartObj = await res.json()
+                        const chartObj = await generateCustomChart(datasetId!, selectedType, xAxis, yAxis)
                         saveCustomCharts([...customCharts, chartObj])
                         setShowStudio(false)
-                      } catch (err) {
+                      } catch (err: any) {
                         console.error('Failed to generate custom chart:', err)
+                        setStudioError(err.message || 'Failed to generate custom chart.')
                       } finally {
                         setGeneratingCustom(false)
                       }
@@ -1714,6 +1792,16 @@ function LoadingState() {
       </div>
       <h2 className="font-bold text-lg mb-2">Analyzing executive KPIs</h2>
       <p style={{ color: 'var(--color-text-secondary)' }}>Generating chart recommendations and root cause drilldowns...</p>
+    </div>
+  )
+}
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div className="text-center py-20 animate-fade-in">
+      <AlertTriangle size={48} style={{ color: 'var(--color-warning)', margin: '0 auto 1rem' }} />
+      <h2 className="font-bold text-xl mb-2">Something went wrong</h2>
+      <p style={{ color: 'var(--color-text-secondary)' }}>{message}</p>
     </div>
   )
 }

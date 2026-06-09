@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { User, Bell, Sparkles, Download, LayoutGrid, CheckCircle, Save, Building } from 'lucide-react'
+import { User, Bell, Sparkles, Download, LayoutGrid, CheckCircle, Save, Building, Clock } from 'lucide-react'
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'ai' | 'notifications' | 'export'>('profile')
+
   const [saved, setSaved] = useState(false)
 
   // Profile State
@@ -24,7 +25,7 @@ export default function SettingsPage() {
   // AI Analyst State
   const [aiSettings, setAiSettings] = useState({
     personality: 'Executive Summaries',
-    model: 'Deep Analysis (Gemini Flash)',
+    model: 'Deep Analysis (Standard)',
     maxTokens: '2048'
   })
 
@@ -69,7 +70,7 @@ export default function SettingsPage() {
           <LayoutGrid className="text-blue-600" size={24} />
           Settings & Preferences
         </h1>
-        <p className="page-subtitle text-sm text-slate-505 dark:text-slate-400 mt-1">
+        <p className="page-subtitle text-sm text-slate-500 dark:text-slate-400 mt-1">
           Customize your profile, workspace settings, AI analyst, and export styling.
         </p>
       </div>
@@ -188,6 +189,47 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+
+              {/* Activity History Card */}
+              <div className="border-t border-slate-150 dark:border-slate-800 pt-6 mt-6">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                  <Clock className="text-blue-600" size={18} />
+                  Recent Activity & Data History
+                </h4>
+                <p className="text-xs text-slate-500 mb-4">View your recent file uploads, analysis executions, and report compilations.</p>
+                <div className="overflow-hidden rounded-xl border border-slate-150 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-150 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">
+                        <th className="p-3">Event / Action</th>
+                        <th className="p-3">Target Asset</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350">
+                      {[
+                        { event: 'PowerPoint Export', asset: 'sample_sales.csv', status: 'Success', time: '10 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
+                        { event: 'PDF Report Generation', asset: 'sample_sales.csv', status: 'Success', time: '14 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
+                        { event: 'Dataset Upload', asset: 'sample_sales.csv (24.5 KB)', status: 'Success', time: '22 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
+                        { event: 'AI Forecast Run', asset: 'sample_sales.csv [Revenue]', status: 'Success', time: '40 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
+                      ].map((act, i) => (
+                        <tr key={i} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors">
+                          <td className="p-3 font-semibold text-slate-900 dark:text-white">{act.event}</td>
+                          <td className="p-3 font-mono text-[10px] text-slate-500 dark:text-slate-400">{act.asset}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${act.color}`}>
+                              {act.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-slate-400">{act.time}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -278,8 +320,8 @@ export default function SettingsPage() {
                     onChange={e => setAiSettings({ ...aiSettings, model: e.target.value })}
                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
                   >
-                    <option value="Deep Analysis (Gemini Flash)">Deep Analysis (Gemini Flash)</option>
-                    <option value="Ultra Precision (Gemini Pro)">Ultra Precision (Gemini Pro)</option>
+                    <option value="Deep Analysis (Standard)">Deep Analysis (Standard)</option>
+                    <option value="Ultra Precision (Advanced)">Ultra Precision (Advanced)</option>
                   </select>
                 </div>
                 <div className="sm:col-span-2">
@@ -318,7 +360,7 @@ export default function SettingsPage() {
                   />
                   <div>
                     <div className="text-sm font-semibold text-slate-800 dark:text-white">Email compiled reports</div>
-                    <div className="text-xs text-slate-505 dark:text-slate-400">Receive a copy of generated PDF and PPTX decks directly in your inbox.</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Receive a copy of generated PDF and PPTX decks directly in your inbox.</div>
                   </div>
                 </label>
 
@@ -331,7 +373,7 @@ export default function SettingsPage() {
                   />
                   <div>
                     <div className="text-sm font-semibold text-slate-800 dark:text-white">Immediate anomaly alerts</div>
-                    <div className="text-xs text-slate-505 dark:text-slate-400">Alert on primary channel if consensus tests detect critical outliers in sales or volumes.</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Alert on primary channel if consensus tests detect critical outliers in sales or volumes.</div>
                   </div>
                 </label>
 
@@ -344,7 +386,7 @@ export default function SettingsPage() {
                   />
                   <div>
                     <div className="text-sm font-semibold text-slate-800 dark:text-white">Weekly health reviews</div>
-                    <div className="text-xs text-slate-505 dark:text-slate-400">Get a weekend roll-up of composite business scores and top category drivers.</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">Get a weekend roll-up of composite business scores and top category drivers.</div>
                   </div>
                 </label>
               </div>
@@ -358,7 +400,7 @@ export default function SettingsPage() {
                 <Download className="text-green-600" size={20} />
                 Export Styling Configurations
               </h3>
-              <p className="text-xs text-slate-505">Customize default cover layouts, margins, and report details.</p>
+              <p className="text-xs text-slate-500">Customize default cover layouts, margins, and report details.</p>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div>
@@ -393,7 +435,7 @@ export default function SettingsPage() {
                     />
                     <div>
                       <div className="text-sm font-semibold text-slate-800 dark:text-white">Include schema profiling appendix</div>
-                      <div className="text-xs text-slate-505 dark:text-slate-400">Append row/column metadata counts, types, and validation details to final outputs.</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">Append row/column metadata counts, types, and validation details to final outputs.</div>
                     </div>
                   </label>
                 </div>
@@ -402,26 +444,29 @@ export default function SettingsPage() {
           )}
 
           {/* Action Row */}
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
-            <div>
-              {saved && (
-                <span className="flex items-center gap-1.5 text-sm text-green-600 font-semibold animate-fade-in">
-                  <CheckCircle size={16} />
-                  Settings saved successfully!
-                </span>
-              )}
+          {['profile', 'workspace', 'ai', 'notifications', 'export'].includes(activeTab) && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div>
+                {saved && (
+                  <span className="flex items-center gap-1.5 text-sm text-green-600 font-semibold animate-fade-in">
+                    <CheckCircle size={16} />
+                    Settings saved successfully!
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={handleSave}
+                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-sm cursor-pointer"
+              >
+                <Save size={16} />
+                Save Preferences
+              </button>
             </div>
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors shadow-sm"
-            >
-              <Save size={16} />
-              Save Preferences
-            </button>
-          </div>
+          )}
 
         </div>
       </div>
     </div>
   )
 }
+

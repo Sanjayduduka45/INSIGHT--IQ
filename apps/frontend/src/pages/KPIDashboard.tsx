@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getKPIs, getDataset } from '../lib/api'
+import { getKPIs, getDataset, getCharts, generateCustomChart, getDatasetPreview } from '../lib/api'
 import { 
   ArrowUpRight, ArrowDownRight, Minus, Info, BarChart3, X, Loader2,
-  Edit2, Save, FileSpreadsheet, PinOff
+  Edit2, Save, FileSpreadsheet, PinOff, AlertTriangle, Share
 } from 'lucide-react'
 import { 
   BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -12,6 +12,7 @@ import {
 } from 'recharts'
 import type { SafeAny, Chart } from '../types'
 import { formatCurrency, formatCompactNumber } from '../lib/formatters'
+import { useAuth } from '../lib/auth'
 
 const CHART_COLORS = ['#2563EB', '#7C3AED', '#059669', '#D97706', '#DC2626', '#0891B2', '#4F46E5', '#EA580C']
 const PIE_COLORS = ['#2563EB', '#7C3AED', '#EC4899', '#F59E0B', '#10B981', '#6366F1', '#14B8A6', '#8B5CF6'];
@@ -52,6 +53,24 @@ const formatPerformerValue = (val: number, metricName: string) => {
 }
 
 export default function KPIDashboard({ datasetId }: Props) {
+  const { user } = useAuth()
+
+  const handleShare = () => {
+    if (user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+    } else {
+      alert('Dashboard link copied to clipboard! (Share feature simulated)')
+    }
+  }
+
+  const handleSaveProject = () => {
+    if (user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+    } else {
+      alert('Project saved successfully in the cloud! (Save feature simulated)')
+    }
+  }
+
   const [customCharts, setCustomCharts] = useState<Chart[]>([])
   const [editingChartIdx, setEditingChartIdx] = useState<number | null>(null)
   const [editingChartTitle, setEditingChartTitle] = useState('')
@@ -111,8 +130,15 @@ export default function KPIDashboard({ datasetId }: Props) {
   const [xAxis, setXAxis] = useState('')
   const [yAxis, setYAxis] = useState('')
   const [generatingCustom, setGeneratingCustom] = useState(false)
+  const [studioError, setStudioError] = useState<string | null>(null)
 
-  const { data: kpiData, isLoading: kpiLoading } = useQuery({
+  useEffect(() => {
+    if (!showStudio) {
+      setStudioError(null)
+    }
+  }, [showStudio])
+
+  const { data: kpiData, isLoading: kpiLoading, error: kpiError } = useQuery({
     queryKey: ['kpis', datasetId],
     queryFn: () => getKPIs(datasetId!),
     enabled: !!datasetId,
@@ -124,65 +150,54 @@ export default function KPIDashboard({ datasetId }: Props) {
     enabled: !!datasetId,
   })
 
-  const { data: chartsData, isLoading: chartsLoading } = useQuery({
-    queryKey: ['charts', datasetId],
+  const { data: chartsData, isLoading: chartsLoading, error: chartsError } = useQuery({
+    queryKey: ['charts-kpi', datasetId],
     queryFn: async () => {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
       try {
-        const res = await fetch(`/api/analytics/${datasetId}/charts?dashboard=kpi`, {
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
-        if (!res.ok) throw new Error('Failed to fetch charts')
-        return res.json()
+        return await getCharts(datasetId!, 'kpi')
       } catch (err) {
-        clearTimeout(timeoutId)
-        console.warn('Charts query failed or timed out. Building charts from preview data.', err)
+        console.warn('Charts query failed. Building charts from preview data.', err)
         try {
-          const previewRes = await fetch(`/api/datasets/${datasetId}/preview`)
-          if (previewRes.ok) {
-            const preview = await previewRes.json()
-            const columns = preview.columns || []
-            const rows = preview.rows || []
-            const numCols = columns.filter((c: any) => c.type === 'numeric' || c.type === 'integer' || c.type === 'float')
-            const catCols = columns.filter((c: any) => c.type === 'categorical')
-            const fallbackCharts: any[] = []
-            if (numCols.length > 0 && rows.length > 0) {
-              const metricName = numCols[0].name
-              fallbackCharts.push({
-                type: 'trend',
-                title: `${metricName} Sequential Profile`,
-                x_axis: 'Record Index', y_axis: metricName,
-                insight: `Live preview data: sequential values of ${metricName}.`,
-                data: rows.slice(0, 30).map((r: any, i: number) => ({ date: `Record ${i + 1}`, value: Number(r[metricName]) || 0 }))
-              })
-            }
-            if (catCols.length > 0 && rows.length > 0) {
-              const catName = catCols[0].name
-              const counts: Record<string, number> = {}
-              rows.forEach((r: any) => { const v = String(r[catName] || 'Unknown'); counts[v] = (counts[v] || 0) + 1 })
-              const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
-              fallbackCharts.push({
-                type: 'bar',
-                title: `Distribution by ${catName}`,
-                x_axis: catName, y_axis: 'Count',
-                insight: `Live preview data: record counts across ${catName}.`,
-                data: sorted.map(([name, value]) => ({ name, value }))
-              })
-            }
+          const preview = await getDatasetPreview(datasetId!) as any
+          const columns = preview.columns || []
+          const rows = preview.rows || []
+          const numCols = columns.filter((c: any) => c.type === 'numeric' || c.type === 'integer' || c.type === 'float')
+          const catCols = columns.filter((c: any) => c.type === 'categorical')
+          const fallbackCharts: any[] = []
+          if (numCols.length > 0 && rows.length > 0) {
+            const metricName = numCols[0].name
+            fallbackCharts.push({
+              type: 'trend',
+              title: `${metricName} Sequential Profile`,
+              x_axis: 'Record Index', y_axis: metricName,
+              insight: `Live preview data: sequential values of ${metricName}.`,
+              data: rows.slice(0, 30).map((r: any, i: number) => ({ date: `Record ${i + 1}`, value: Number(r[metricName]) || 0 }))
+            })
+          }
+          if (catCols.length > 0 && rows.length > 0) {
+            const catName = catCols[0].name
+            const counts: Record<string, number> = {}
+            rows.forEach((r: any) => { const v = String(r[catName] || 'Unknown'); counts[v] = (counts[v] || 0) + 1 })
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
             fallbackCharts.push({
               type: 'bar',
-              title: 'Column Completeness Audit',
-              x_axis: 'Column', y_axis: 'Non-Null Records',
-              insight: 'Data completeness from live preview.',
-              data: columns.slice(0, 10).map((c: any) => ({
-                name: c.name.length > 15 ? c.name.substring(0, 15) : c.name,
-                value: rows.filter((r: any) => r[c.name] != null && r[c.name] !== '').length
-              }))
+              title: `Distribution by ${catName}`,
+              x_axis: catName, y_axis: 'Count',
+              insight: `Live preview data: record counts across ${catName}.`,
+              data: sorted.map(([name, value]) => ({ name, value }))
             })
-            return { charts: fallbackCharts }
           }
+          fallbackCharts.push({
+            type: 'bar',
+            title: 'Column Completeness Audit',
+            x_axis: 'Column', y_axis: 'Non-Null Records',
+            insight: 'Data completeness from live preview.',
+            data: columns.slice(0, 10).map((c: any) => ({
+              name: c.name.length > 15 ? c.name.substring(0, 15) : c.name,
+              value: rows.filter((r: any) => r[c.name] != null && r[c.name] !== '').length
+            }))
+          })
+          return { charts: fallbackCharts }
         } catch { /* preview failed */ }
         return { charts: [] }
       }
@@ -265,14 +280,56 @@ export default function KPIDashboard({ datasetId }: Props) {
     }
   }
 
+  const error = kpiError || chartsError
+  if (kpiLoading || chartsLoading) {
+    return (
+      <div className="text-center py-20 animate-pulse">
+        <div className="inline-block p-4 rounded-full mb-4" style={{ background: 'var(--color-primary-50)' }}>
+          <BarChart3 size={32} style={{ color: 'var(--color-primary)' }} />
+        </div>
+        <h2 className="font-bold text-lg mb-2">Analyzing KPIs...</h2>
+        <p style={{ color: 'var(--color-text-secondary)' }}>Gathering business metrics and recommended visualizations...</p>
+      </div>
+    )
+  }
+  
+  if (error) {
+    return (
+      <div className="text-center py-20">
+        <AlertTriangle size={48} style={{ color: 'var(--color-warning)', margin: '0 auto 1rem' }} />
+        <h2 className="font-bold text-xl mb-2">Something went wrong</h2>
+        <p style={{ color: 'var(--color-text-secondary)' }}>{(error as Error).message || 'Failed to load KPI Dashboard.'}</p>
+      </div>
+    )
+  }
+
   return (
     <div className="animate-fade-in">
-      <div className="page-header">
-        <h1 className="page-title">KPI Dashboard</h1>
-        <p className="page-subtitle">
-          {kpiData?.domain ? `${kpiData.domain} domain metrics` : 'Auto-detected business metrics'}
-        </p>
+      <div className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="page-title">KPI Dashboard</h1>
+          <p className="page-subtitle">
+            {kpiData?.domain ? `${kpiData.domain} domain metrics` : 'Auto-detected business metrics'}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSaveProject}
+            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-55 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-sm shadow-sm transition-all text-slate-700 dark:text-white cursor-pointer"
+          >
+            <Save size={16} />
+            Save Project
+          </button>
+          <button 
+            onClick={handleShare}
+            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-55 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-sm shadow-sm transition-all text-slate-700 dark:text-white cursor-pointer"
+          >
+            <Share size={16} />
+            Share Dashboard
+          </button>
+        </div>
       </div>
+
 
       {/* KPI Cards — Guaranteed 8–12 */}
       {enrichedKpis.length > 0 && (
@@ -639,6 +696,12 @@ export default function KPIDashboard({ datasetId }: Props) {
                     </div>
                   )}
 
+                  {studioError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-[10px] text-red-600 font-semibold leading-relaxed">
+                      ⚠️ {studioError}
+                    </div>
+                  )}
+
                   <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-xl text-[10px] text-slate-500 leading-relaxed">
                     💡 <strong>Tip:</strong> Selecting Recommended configurations ensures optimal visual clarity and correct data aggregation formats.
                   </div>
@@ -649,22 +712,14 @@ export default function KPIDashboard({ datasetId }: Props) {
                     onClick={async () => {
                       if (!selectedType) return
                       setGeneratingCustom(true)
+                      setStudioError(null)
                       try {
-                        const token = localStorage.getItem('insightiq_token')
-                        const headers: Record<string, string> = {}
-                        if (token) {
-                          headers['Authorization'] = `Bearer ${token}`
-                        }
-                        const res = await fetch(
-                          `/api/analytics/${datasetId}/generate-custom-chart?type=${selectedType}&x_axis=${xAxis}&y_axis=${yAxis}`,
-                          { method: 'POST', headers }
-                        )
-                        if (!res.ok) throw new Error('Failed to generate chart')
-                        const chartObj = await res.json()
+                        const chartObj = await generateCustomChart(datasetId!, selectedType, xAxis, yAxis)
                         saveCustomCharts([...customCharts, chartObj])
                         setShowStudio(false)
-                      } catch (err) {
+                      } catch (err: any) {
                         console.error('Failed to generate custom chart:', err)
+                        setStudioError(err.message || 'Failed to generate custom chart.')
                       } finally {
                         setGeneratingCustom(false)
                       }

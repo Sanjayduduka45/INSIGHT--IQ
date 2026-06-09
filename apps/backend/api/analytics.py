@@ -37,7 +37,13 @@ async def get_kpis(dataset_id: str):
     if not ds:
         raise HTTPException(404, "Dataset not found")
 
-    kpis: List[KPI] = ds.get("kpis", [])
+    context = ds.get("context")
+    if context:
+        from intelligence.kpi_generator import generate_context_driven_kpis
+        kpis = generate_context_driven_kpis(ds["df"], ds["schema"], ds["domain"].domain, context)
+    else:
+        kpis = ds.get("kpis", [])
+        
     return {
         "dataset_id": dataset_id,
         "domain": ds["domain"].domain,
@@ -248,14 +254,21 @@ async def get_overview(dataset_id: str):
     schema = ds["schema"]
     quality = ds["quality"]
     domain = ds["domain"]
-    kpis: List[KPI] = ds.get("kpis", [])
     df = ds["df"]
+    context = ds.get("context")
+
+    # Generate context-driven KPIs
+    if context:
+        from intelligence.kpi_generator import generate_context_driven_kpis
+        kpis = generate_context_driven_kpis(df, schema, domain.domain, context)
+    else:
+        kpis = ds.get("kpis", [])
 
     # Business health score ( composite and explainable )
     health_explainable = compute_explainable_health_score(df, schema, quality, kpis)
 
     # Auto-generate insights
-    insights = _generate_insights(df, schema, kpis, domain.domain)
+    insights = _generate_insights(df, schema, kpis, domain.domain, context)
 
     # Resolve top performers
     from core.df_utils import get_analytic_numeric_cols, generate_categorical_insights
@@ -299,7 +312,7 @@ async def get_overview(dataset_id: str):
         ai_recs.append("Review correlation insights to identify key business drivers.")
 
     # Executive intelligence report
-    executive_intel = generate_executive_report(df, schema, quality, kpis, domain.domain)
+    executive_intel = generate_executive_report(df, schema, quality, kpis, domain.domain, context)
 
     # Root Cause Summary
     rc_summary = "All main indicators are performing within normal standard deviations."
@@ -336,6 +349,7 @@ async def get_overview(dataset_id: str):
             "date_cols": len(schema.date_columns),
             "memory_mb": round(schema.memory_mb, 2),
         },
+        "context": context,
     }
 
 
@@ -380,7 +394,13 @@ async def get_charts(dataset_id: str, dashboard: Optional[str] = Query(None)):
     if not ds:
         raise HTTPException(404, "Dataset not found")
 
+    from analytics.charts import recommend_charts, customize_charts_by_context
     charts = recommend_charts(ds["df"], ds["schema"], dashboard=dashboard)
+    
+    context = ds.get("context")
+    if context:
+        charts = customize_charts_by_context(charts, ds["df"], ds["schema"], context, dashboard)
+
     return {
         "dataset_id": dataset_id,
         "charts": charts,
@@ -400,8 +420,11 @@ async def get_custom_chart(
         raise HTTPException(404, "Dataset not found")
 
     from analytics.charts import generate_custom_chart_data
-    chart = generate_custom_chart_data(ds["df"], ds["schema"], type, x_axis, y_axis)
-    return chart
+    try:
+        chart = generate_custom_chart_data(ds["df"], ds["schema"], type, x_axis, y_axis)
+        return chart
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/{dataset_id}/top-performers")
@@ -470,40 +493,80 @@ def _compute_health_score(kpis: List[KPI], quality: float) -> float:
     return round(avg_trend * 0.6 + quality * 0.4, 1)
 
 
-def _generate_insights(df, schema, kpis, domain) -> List[Dict[str, Any]]:
-    """Auto-generate top insights."""
-    insights = []
+def _generate_insights(df, schema, kpis, domain, context=None) -> List[Dict[str, Any]]:
+    """Auto-generate top insights in 4-part format: observation, evidence, business impact, recommendation."""
+    from core.settings import get_settings
+    settings = get_settings()
 
-    # Insight 1: Strongest KPI trend
+    if settings.google_api_key:
+        try:
+            import json
+            from core.gemini_utils import generate_content_with_gemini
+            
+            kpi_summary = [{"name": k.name, "value": k.formatted_value, "trend": k.trend, "trend_value": k.trend_value} for k in kpis[:5]]
+            
+            prompt = f"""You are a Strategic Data Analyst. Analyze the following KPI statistics and dataset metadata:
+- Dataset Domain: {domain}
+- Dataset Rows: {len(df)}
+- Columns: {[c.name for c in schema.columns] if schema else []}
+- Stated Business Problem: {context.get('business_problem') if context else 'N/A'}
+- Stated Analysis Goal: {context.get('analysis_goal') if context else 'N/A'}
+- Stated Success Metric: {context.get('success_metric') if context else 'N/A'}
+- Core KPIs: {json.dumps(kpi_summary)}
+
+Generate exactly 3 key business insights tailored to the stated business problem, analysis goal, and success metric.
+Each insight must follow a strict 4-part structure:
+1. "observation": What happened? (A concise, clear sentence describing a trend, category skew, outlier, or pattern)
+2. "evidence": What is the proof? (Specify concrete metrics, percentages, numbers, or column sources from the data)
+3. "business_impact": Why does it matter? (Explain the financial, operational, or customer risk/opportunity)
+4. "recommendation": What should be done? (Specify an actionable, concrete next step)
+
+Return the response in JSON format as a list of 3 objects with keys "observation", "evidence", "business_impact", "recommendation", and "severity" ("positive", "warning", or "info").
+Return ONLY the raw JSON block. Do not include markdown wraps like ```json.
+"""
+            text = generate_content_with_gemini(
+                prompt=prompt,
+                model_name=settings.gemini_model,
+                api_key=settings.google_api_key,
+                response_mime_type="application/json",
+                temperature=0.2
+            )
+            if text.startswith("```"):
+                text = text.replace("```json", "").replace("```", "").strip()
+            
+            insights = json.loads(text)
+            if isinstance(insights, list) and len(insights) > 0:
+                # Add titles for backward compatibility
+                for ins in insights:
+                    if "observation" in ins:
+                        ins["title"] = ins["observation"]
+                        ins["description"] = f"Evidence: {ins['evidence']}\nImpact: {ins['business_impact']}\nRecommendation: {ins['recommendation']}"
+                return insights
+        except Exception as gemini_err:
+            logger.warning(f"Failed to generate insights via Gemini: {gemini_err}. Falling back to template-based insights.")
+
+    # Fallback template-based insights
+    insights = []
+    
+    # Insight 1: Trend-based
     trending_kpis = [k for k in kpis if k.trend in ("up", "down")]
     if trending_kpis:
         best = max(trending_kpis, key=lambda k: abs(k.trend_value))
-        direction = "increased" if best.trend == "up" else "decreased"
-        insights.append(
-            {
-                "type": "trend",
-                "title": f"{best.name} {direction} by {abs(best.trend_value):.1f}%",
-                "description": f"Your {best.name.lower()} has {direction} significantly. This is {'positive' if best.trend == 'up' else 'concerning'} for business performance.",
-                "severity": "positive" if best.trend == "up" else "warning",
-                "priority": 1,
-            }
-        )
-
-    # Insight 2: Data quality
-    if schema:
-        missing_pct = df.isna().mean().mean() * 100
-        if missing_pct > 5:
-            insights.append(
-                {
-                    "type": "quality",
-                    "title": f"{missing_pct:.1f}% data is missing",
-                    "description": "Significant missing data may affect analysis accuracy. Consider data imputation or review data collection processes.",
-                    "severity": "warning" if missing_pct > 15 else "info",
-                    "priority": 2,
-                }
-            )
-
-    # Insight 3: Top category
+        direction = "upward expansion" if best.trend == "up" else "contraction"
+        status = "positive growth" if best.trend == "up" else "concerning decline"
+        action = f"Scale operations and capitalize on the '{best.name}' momentum." if best.trend == "up" else f"Perform a category margin audit on '{best.name}' to isolate leakage."
+        
+        insights.append({
+            "observation": f"Primary business metric '{best.name}' is experiencing {direction}.",
+            "evidence": f"Dataset calculations reveal '{best.name}' shifted by {best.trend_value:+.1f}% PoP, reaching {best.formatted_value}.",
+            "business_impact": f"This trend represents a {status} directly impacting the stated primary optimization targets.",
+            "recommendation": action,
+            "severity": "positive" if best.trend == "up" else "warning",
+            "title": f"{best.name} showing {direction}",
+            "description": f"Grounded trend of {best.trend_value:+.1f}% observed."
+        })
+        
+    # Insight 2: Skewness/Breakdown
     from core.df_utils import get_categorical_cols, get_analytic_numeric_cols
     cat_cols = get_categorical_cols(df, schema)
     analytic_nums = get_analytic_numeric_cols(df, schema)
@@ -511,18 +574,34 @@ def _generate_insights(df, schema, kpis, domain) -> List[Dict[str, Any]]:
         try:
             cat_col = cat_cols[0]
             num_col = analytic_nums[0]
-            top = df.groupby(cat_col)[num_col].sum().idxmax()
-            top_val = df.groupby(cat_col)[num_col].sum().max()
-            insights.append(
-                {
-                    "type": "highlight",
-                    "title": f"Top {cat_col}: {top}",
-                    "description": f"'{top}' leads in {num_col} with a total of {top_val:,.0f}.",
-                    "severity": "positive",
-                    "priority": 3,
-                }
-            )
+            grouped = df.groupby(cat_col)[num_col].sum().sort_values(ascending=False)
+            top = str(grouped.index[0])
+            top_val = float(grouped.max())
+            total = float(grouped.sum())
+            share = (top_val / total) * 100 if total > 0 else 0
+            
+            insights.append({
+                "observation": f"Metric concentration is heavily focused in category '{top}'.",
+                "evidence": f"'{top}' alone contributes {share:.1f}% of total {num_col} ({top_val:,.0f} of {total:,.0f}).",
+                "business_impact": f"High skew indicates the business is highly dependent on a single category, representing operational risk.",
+                "recommendation": f"Expand marketing and product diversification to stabilize other segments.",
+                "severity": "info",
+                "title": f"Concentration in {top}",
+                "description": f"'{top}' represents {share:.1f}% of overall {num_col} value."
+            })
         except Exception:
             pass
-
-    return insights[:10]
+            
+    # Insight 3: Data Integrity
+    missing_pct = df.isna().mean().mean() * 100
+    insights.append({
+        "observation": f"Data quality check shows a completeness level of {100 - missing_pct:.1f}%.",
+        "evidence": f"Across all rows and columns, {missing_pct:.1f}% of data values are null or empty.",
+        "business_impact": f"Significant missing fields can dilute downstream model accuracy and forecasting reliability.",
+        "recommendation": "Enforce mandatory field validation at the data ingestion gate.",
+        "severity": "warning" if missing_pct > 10 else "info",
+        "title": "Data completeness audit",
+        "description": f"Completeness evaluated at {100 - missing_pct:.1f}%."
+    })
+    
+    return insights[:3]

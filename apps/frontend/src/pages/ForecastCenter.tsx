@@ -1,13 +1,11 @@
-/**
- * InsightIQ — Forecast Center
- */
-
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getForecastableColumns, generateForecast } from '../lib/api'
-import { TrendingUp, Calendar } from 'lucide-react'
+import { TrendingUp, Calendar, Save, Share, AlertTriangle } from 'lucide-react'
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, Legend } from 'recharts'
 import type { SafeAny } from '../types'
+import { useAuth } from '../lib/auth'
+
 
 function safeRender(value: any): React.ReactNode {
   if (value === null || value === undefined) return '';
@@ -38,16 +36,33 @@ interface Props {
 }
 
 export default function ForecastCenter({ datasetId }: Props) {
+  const { user } = useAuth()
   const [selectedMetric, setSelectedMetric] = useState<string | undefined>()
   const [selectedDateCol, setSelectedDateCol] = useState<string | undefined>()
 
-  const { data: forecastable, isLoading: colsLoading } = useQuery({
+  const handleShare = () => {
+    if (user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+    } else {
+      alert('Dashboard link copied to clipboard! (Share feature simulated)')
+    }
+  }
+
+  const handleSaveProject = () => {
+    if (user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+    } else {
+      alert('Project saved successfully in the cloud! (Save feature simulated)')
+    }
+  }
+
+  const { data: forecastable, isLoading: colsLoading, error: colsError } = useQuery({
     queryKey: ['forecastable', datasetId],
     queryFn: () => getForecastableColumns(datasetId!),
     enabled: !!datasetId,
   })
 
-  const { data: forecast, isLoading: forecastLoading } = useQuery({
+  const { data: forecast, isLoading: forecastLoading, error: forecastError } = useQuery({
     queryKey: ['forecast', datasetId, selectedMetric, selectedDateCol],
     queryFn: () => generateForecast(datasetId!, selectedMetric || '', '7,30,90', selectedDateCol),
     enabled: !!datasetId && (!!selectedMetric || (!!forecastable && (forecastable.forecastable?.length || 0) > 0)),
@@ -57,6 +72,23 @@ export default function ForecastCenter({ datasetId }: Props) {
   if (!datasetId) return <NoDataset label="Forecast Center" />
 
   if (colsLoading) return <LoadingState text="Analyzing time-series patterns..." />
+
+  if (colsError || forecastError) {
+    const err = (colsError || forecastError) as any;
+    return (
+      <div className="max-w-2xl mx-auto py-16 animate-fade-in">
+        <div className="card card-body border-red-200 bg-red-50/10">
+          <div className="flex items-center gap-3 text-red-600 mb-4">
+            <AlertTriangle size={32} />
+            <h3 className="text-lg font-bold">Forecasting Error</h3>
+          </div>
+          <p className="text-sm text-slate-700 mb-6 font-medium">
+            {err?.message || "An unexpected error occurred while communicating with the forecasting service."}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (!forecastable?.forecastable?.length && !forecastable?.date_like_columns?.length && !selectedDateCol) {
     return (
@@ -135,7 +167,9 @@ export default function ForecastCenter({ datasetId }: Props) {
   }
 
   // Use the API response metric if user hasn't selected one
-  const currentMetric = selectedMetric || forecast?.metric || (forecastable?.forecastable?.[0] || '')
+  const firstCol = forecastable?.forecastable?.[0];
+  const defaultMetric = typeof firstCol === 'string' ? firstCol : firstCol?.column;
+  const currentMetric = selectedMetric || forecast?.metric || (defaultMetric || '')
   
   // Combine historical and forecast data for the chart
   const activeForecast = forecast?.forecasts?.find((f: SafeAny) => f.horizon_days === 30) // Default to 30 day view
@@ -146,7 +180,7 @@ export default function ForecastCenter({ datasetId }: Props) {
       date: d.date,
       Actual: d.value,
       Forecast: null,
-      range: null
+      range: [d.value, d.value]
     }))
     const fut = activeForecast.forecast.map((d: SafeAny) => ({
       date: d.date,
@@ -159,24 +193,46 @@ export default function ForecastCenter({ datasetId }: Props) {
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header flex items-center justify-between">
+      <div className="page-header flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="page-title">Forecast Center</h1>
           <p className="page-subtitle">Predictive analytics with confidence intervals</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <select 
             value={currentMetric} 
             onChange={e => setSelectedMetric(e.target.value)}
-            className="border rounded-md px-3 py-1.5 text-sm font-medium"
-            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}
+            className="border rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 bg-white dark:bg-slate-800 dark:text-white"
+            style={{ borderColor: 'var(--color-border)' }}
           >
-            {forecastable?.forecastable?.map((c: string) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {forecastable?.forecastable?.map((c: SafeAny) => {
+              const columnName = typeof c === 'string' ? c : c?.column;
+              return (
+                <option key={columnName} value={columnName}>
+                  {columnName}
+                </option>
+              );
+            })}
           </select>
+
+          <button 
+            onClick={handleSaveProject}
+            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-sm shadow-sm transition-all text-slate-700 dark:text-white cursor-pointer"
+          >
+            <Save size={16} />
+            Save Project
+          </button>
+
+          <button 
+            onClick={handleShare}
+            className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-xl font-semibold text-sm shadow-sm transition-all text-slate-700 dark:text-white cursor-pointer"
+          >
+            <Share size={16} />
+            Share Dashboard
+          </button>
         </div>
       </div>
+
 
       {forecastLoading ? (
         <LoadingState text="Generating multi-model forecasts..." />
@@ -209,6 +265,17 @@ export default function ForecastCenter({ datasetId }: Props) {
                   <Tooltip 
                     contentStyle={{ borderRadius: 12, border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     labelStyle={{ fontWeight: 'bold', color: '#0F172A', marginBottom: 4 }}
+                    formatter={(value: any, name: any) => {
+                      if (name === 'Confidence Interval') {
+                        if (Array.isArray(value)) {
+                          if (value[0] === value[1] || value[0] == null || value[1] == null) return ['', name];
+                          return [`${Number(value[0]).toFixed(2)} - ${Number(value[1]).toFixed(2)}`, name];
+                        }
+                        return ['', name];
+                      }
+                      if (value == null) return ['', name];
+                      return [value, name];
+                    }}
                   />
                   <Legend wrapperStyle={{ paddingTop: 20 }} />
                   

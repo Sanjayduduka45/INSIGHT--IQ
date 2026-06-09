@@ -5,6 +5,7 @@
 import { useState } from 'react'
 import { FileText, Download, FileSpreadsheet, Presentation, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { getExportUrl } from '../lib/api'
+import { useAuth } from '../lib/auth'
 
 interface Props {
   datasetId: string | null
@@ -13,6 +14,7 @@ interface Props {
 export default function ExecutiveReports({ datasetId }: Props) {
   const [exporting, setExporting] = useState<'pdf' | 'ppt' | 'csv' | 'xlsx' | null>(null)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const { user } = useAuth()
 
   if (!datasetId) {
     return (
@@ -25,7 +27,12 @@ export default function ExecutiveReports({ datasetId }: Props) {
   }
 
   const handleDownload = async (type: 'pdf' | 'ppt' | 'csv' | 'xlsx') => {
+    if ((type === 'pdf' || type === 'ppt') && user?.role === 'guest') {
+      window.dispatchEvent(new CustomEvent('insightiq-trigger-signup'))
+      return
+    }
     setExporting(type)
+
     setToast(null)
     try {
       const token = localStorage.getItem('insightiq_token')
@@ -113,7 +120,7 @@ export default function ExecutiveReports({ datasetId }: Props) {
               <FileText size={32} />
             </div>
             <h3 className="font-bold text-lg mb-2 text-slate-800">PDF Summary</h3>
-            <p className="text-xs text-slate-505 mb-2 leading-relaxed">
+            <p className="text-xs text-slate-500 mb-2 leading-relaxed">
               A clean, printable executive summary featuring key KPIs, findings, and analysis.
             </p>
           </div>
@@ -135,7 +142,7 @@ export default function ExecutiveReports({ datasetId }: Props) {
               <Presentation size={32} />
             </div>
             <h3 className="font-bold text-lg mb-2 text-slate-800">PowerPoint</h3>
-            <p className="text-xs text-slate-505 mb-2 leading-relaxed">
+            <p className="text-xs text-slate-500 mb-2 leading-relaxed">
               A ready-to-present slide deck containing data insights, formatted for boardrooms.
             </p>
           </div>
@@ -157,7 +164,7 @@ export default function ExecutiveReports({ datasetId }: Props) {
               <FileSpreadsheet size={32} />
             </div>
             <h3 className="font-bold text-lg mb-2 text-slate-800">Raw Data (CSV)</h3>
-            <p className="text-xs text-slate-505 mb-2 leading-relaxed">
+            <p className="text-xs text-slate-500 mb-2 leading-relaxed">
               Export the underlying processed dataset as a CSV file for your own models.
             </p>
           </div>
@@ -179,7 +186,7 @@ export default function ExecutiveReports({ datasetId }: Props) {
               <FileSpreadsheet size={32} />
             </div>
             <h3 className="font-bold text-lg mb-2 text-slate-800">Excel (XLSX)</h3>
-            <p className="text-xs text-slate-505 mb-2 leading-relaxed">
+            <p className="text-xs text-slate-500 mb-2 leading-relaxed">
               Export the underlying processed dataset as a formatted Excel spreadsheet.
             </p>
           </div>

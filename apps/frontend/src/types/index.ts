@@ -77,6 +77,11 @@ export interface OverviewData {
   ai_recommendations?: string[];
   insights?: Insight[];
   executive_intelligence?: SafeAny;
+  context?: {
+    business_problem: string;
+    analysis_goal: string;
+    success_metric: string;
+  };
 }
 
 export interface TopPerformersData {

@@ -62,8 +62,8 @@ def compute_explainable_health_score(
     profit_keywords = ["profit", "margin", "earnings", "net"]
     rev_keywords = ["revenue", "sales", "spend", "amount", "total", "price", "cost"]
     
-    profit_col = next((c for c in df.columns if any(kw in c.lower() for kw in profit_keywords)), None)
-    rev_col = next((c for c in df.columns if any(kw in c.lower() for kw in rev_keywords)), None) or (numeric_cols[0] if numeric_cols else None)
+    profit_col = next((c for c in numeric_cols if any(kw in c.lower() for kw in profit_keywords)), None)
+    rev_col = next((c for c in numeric_cols if any(kw in c.lower() for kw in rev_keywords)), None) or (numeric_cols[0] if numeric_cols else None)
     
     profitability_score = 80.0  # default baseline
     

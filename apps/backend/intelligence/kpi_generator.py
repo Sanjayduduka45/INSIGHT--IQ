@@ -980,3 +980,95 @@ def _fallback_kpis(df: pd.DataFrame, schema: DatasetSchema, currency: str = "INR
         cat_kpis_added += 1
 
     return kpis
+
+
+def generate_context_driven_kpis(
+    df: pd.DataFrame,
+    schema: DatasetSchema,
+    domain: str,
+    context: Optional[Dict[str, Any]] = None
+) -> List[KPI]:
+    """Generate KPIs optimized for the user's business context and analysis goal."""
+    if not context or not context.get("analysis_goal"):
+        return generate_kpis(df, schema, domain)
+
+    goal = str(context.get("analysis_goal", "")).strip()
+    currency = _detect_currency(df)
+
+    goal_templates = {
+        "Revenue Growth": [
+            {"name": "Total Revenue", "keywords": ["revenue", "sales", "amount", "total", "income", "turnover"], "agg": "sum", "unit": "currency", "icon": "💰", "cat": "revenue"},
+            {"name": "Total Profit", "keywords": ["profit", "margin", "earnings", "net_income"], "agg": "sum", "unit": "currency", "icon": "📈", "cat": "revenue"},
+            {"name": "Profit Margin", "keywords": ["margin", "profit_pct", "gross_margin", "profit_margin"], "agg": "mean", "unit": "percentage", "icon": "📊", "cat": "efficiency"},
+            {"name": "Average Order Value (AOV)", "keywords": ["basket_value", "average_basket", "aov", "revenue", "sales", "amount"], "agg": "mean", "unit": "currency", "icon": "🛒", "cat": "efficiency"},
+            {"name": "Revenue Growth Rate", "keywords": ["growth", "growth_rate"], "agg": "mean", "unit": "percentage", "icon": "📈", "cat": "growth"},
+            {"name": "Units Sold", "keywords": ["quantity", "qty", "volume", "units_sold", "units"], "agg": "sum", "unit": "count", "icon": "📦", "cat": "growth"}
+        ],
+        "Financial Performance": [
+            {"name": "Total Revenue", "keywords": ["revenue", "sales", "amount", "total", "income", "turnover"], "agg": "sum", "unit": "currency", "icon": "💰", "cat": "revenue"},
+            {"name": "Total Profit", "keywords": ["profit", "margin", "earnings", "net_income"], "agg": "sum", "unit": "currency", "icon": "📈", "cat": "revenue"},
+            {"name": "Profit Margin", "keywords": ["margin", "profit_pct", "gross_margin", "profit_margin"], "agg": "mean", "unit": "percentage", "icon": "📊", "cat": "efficiency"},
+            {"name": "Average Order Value (AOV)", "keywords": ["basket_value", "average_basket", "aov", "revenue", "sales", "amount"], "agg": "mean", "unit": "currency", "icon": "🛒", "cat": "efficiency"},
+            {"name": "Revenue Growth Rate", "keywords": ["growth", "growth_rate"], "agg": "mean", "unit": "percentage", "icon": "📈", "cat": "growth"},
+            {"name": "Units Sold", "keywords": ["quantity", "qty", "volume", "units_sold", "units"], "agg": "sum", "unit": "count", "icon": "📦", "cat": "growth"}
+        ],
+        "Customer Intelligence": [
+            {"name": "Total Customers", "keywords": ["customer", "client", "buyer", "user", "customer_id", "client_id"], "agg": "nunique", "unit": "count", "icon": "👥", "cat": "growth"},
+            {"name": "Churn Rate", "keywords": ["churn", "churn_rate", "attrition", "left", "cancelled"], "agg": "mean", "unit": "percentage", "icon": "📉", "cat": "risk"},
+            {"name": "Retention Rate", "keywords": ["retention", "retention_rate", "active_users"], "agg": "mean", "unit": "percentage", "icon": "🛡️", "cat": "quality"},
+            {"name": "Customer Lifetime Value (LTV)", "keywords": ["ltv", "clv", "lifetime_value"], "agg": "mean", "unit": "currency", "icon": "💎", "cat": "growth"},
+            {"name": "Active Customers", "keywords": ["active", "active_customers", "user_id", "customer_id"], "agg": "nunique", "unit": "count", "icon": "👥", "cat": "growth"}
+        ],
+        "Forecasting": [
+            {"name": "Total Customers", "keywords": ["customer", "client", "buyer", "user", "customer_id", "client_id"], "agg": "nunique", "unit": "count", "icon": "👥", "cat": "growth"},
+            {"name": "Churn Rate", "keywords": ["churn", "churn_rate", "attrition", "left", "cancelled"], "agg": "mean", "unit": "percentage", "icon": "📉", "cat": "risk"},
+            {"name": "Retention Rate", "keywords": ["retention", "retention_rate", "active_users"], "agg": "mean", "unit": "percentage", "icon": "🛡️", "cat": "quality"},
+            {"name": "Customer Lifetime Value (LTV)", "keywords": ["ltv", "clv", "lifetime_value"], "agg": "mean", "unit": "currency", "icon": "💎", "cat": "growth"},
+            {"name": "Active Customers", "keywords": ["active", "active_customers", "user_id", "customer_id"], "agg": "nunique", "unit": "count", "icon": "👥", "cat": "growth"}
+        ],
+        "Marketing Analytics": [
+            {"name": "Conversion Rate", "keywords": ["conversion_rate", "conversion", "conv_pct"], "agg": "mean", "unit": "percentage", "icon": "🎯", "cat": "efficiency"},
+            {"name": "Click-Through Rate (CTR)", "keywords": ["ctr", "click_through_rate"], "agg": "mean", "unit": "percentage", "icon": "🖱️", "cat": "efficiency"},
+            {"name": "Cost Per Acquisition (CAC)", "keywords": ["cac", "cpa", "cost_per_acquisition", "acquisition_cost"], "agg": "mean", "unit": "currency", "icon": "💸", "cat": "risk"},
+            {"name": "Marketing ROI / ROAS", "keywords": ["roi", "roas", "return_on_ad_spend"], "agg": "mean", "unit": "percentage", "icon": "📊", "cat": "growth"},
+            {"name": "Total Impressions", "keywords": ["impressions", "views"], "agg": "sum", "unit": "count", "icon": "👁️", "cat": "general"},
+            {"name": "Total Clicks", "keywords": ["clicks"], "agg": "sum", "unit": "count", "icon": "🖱️", "cat": "general"}
+        ],
+        "Operational Efficiency": [
+            {"name": "Operational Volume", "keywords": ["volume", "quantity", "qty", "units_sold", "units", "shipments", "output"], "agg": "sum", "unit": "count", "icon": "🚚", "cat": "growth"},
+            {"name": "On-Time Rate", "keywords": ["ontime", "on_time", "delay"], "agg": "mean", "unit": "percentage", "icon": "⏰", "cat": "quality"},
+            {"name": "Transit/Cycle Time", "keywords": ["transit", "delivery_time", "cycle_time", "duration", "days"], "agg": "mean", "unit": "count", "icon": "📅", "cat": "efficiency"},
+            {"name": "Defect Rate", "keywords": ["defect", "reject", "scrap", "defective"], "agg": "mean", "unit": "percentage", "icon": "⚠️", "cat": "quality"},
+            {"name": "Downtime Hours", "keywords": ["downtime", "idle", "maintenance"], "agg": "sum", "unit": "count", "icon": "⏸️", "cat": "risk"},
+            {"name": "Yield Rate / Efficiency", "keywords": ["yield", "efficiency", "oee"], "agg": "mean", "unit": "percentage", "icon": "📊", "cat": "efficiency"}
+        ],
+        "Supply Chain Optimization": [
+            {"name": "Operational Volume", "keywords": ["volume", "quantity", "qty", "units_sold", "units", "shipments", "output"], "agg": "sum", "unit": "count", "icon": "🚚", "cat": "growth"},
+            {"name": "On-Time Rate", "keywords": ["ontime", "on_time", "delay"], "agg": "mean", "unit": "percentage", "icon": "⏰", "cat": "quality"},
+            {"name": "Transit/Cycle Time", "keywords": ["transit", "delivery_time", "cycle_time", "duration", "days"], "agg": "mean", "unit": "count", "icon": "📅", "cat": "efficiency"},
+            {"name": "Defect Rate", "keywords": ["defect", "reject", "scrap", "defective"], "agg": "mean", "unit": "percentage", "icon": "⚠️", "cat": "quality"},
+            {"name": "Downtime Hours", "keywords": ["downtime", "idle", "maintenance"], "agg": "sum", "unit": "count", "icon": "⏸️", "cat": "risk"},
+            {"name": "Yield Rate / Efficiency", "keywords": ["yield", "efficiency", "oee"], "agg": "mean", "unit": "percentage", "icon": "📊", "cat": "efficiency"}
+        ]
+    }
+
+    templates = goal_templates.get(goal, [])
+    if not templates:
+        return generate_kpis(df, schema, domain)
+
+    kpis: List[KPI] = []
+    for tmpl in templates:
+        kpi = _compute_kpi(df, schema, tmpl, currency=currency)
+        if kpi is not None:
+            kpis.append(kpi)
+
+    if not kpis:
+        return generate_kpis(df, schema, domain)
+
+    kpis.sort(key=lambda k: k.priority)
+    for kpi in kpis:
+        kpi.name = normalize_kpi_name(kpi.name)
+        kpi.description = f"{kpi.name} computed from dataset columns based on goal: {goal}."
+        
+    return kpis[:12]
+

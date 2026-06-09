@@ -2,11 +2,12 @@
  * InsightIQ — Upload Page
  *
  * Drag-and-drop file upload with progress, schema preview, and domain detection.
+ * Followed by business context definition and AI analysis strategy formulation.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Upload as UploadIcon, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X, Database, ArrowRight, Trash2 } from 'lucide-react'
-import { uploadDataset, listDatasets, deleteDataset, ApiError } from '../lib/api'
+import { Upload as UploadIcon, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X, Database, ArrowRight, Trash2, Sparkles } from 'lucide-react'
+import { uploadDataset, listDatasets, deleteDataset, updateDatasetContext, ApiError } from '../lib/api'
 import type { SafeAny } from '../types'
 
 interface UploadProps {
@@ -14,6 +15,13 @@ interface UploadProps {
 }
 
 export default function UploadPage({ onDatasetLoaded }: UploadProps) {
+  // Navigation & View Modes
+  const [viewMode, setViewMode] = useState<'upload' | 'capture' | 'strategy'>('upload')
+  const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null)
+  const [activeDatasetName, setActiveDatasetName] = useState<string>('')
+  const [activeDatasetMeta, setActiveDatasetMeta] = useState<Record<string, unknown>>({})
+
+  // File Upload State
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -21,8 +29,17 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [diagnostics, setDiagnostics] = useState<Record<string, SafeAny> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
   const [datasets, setDatasets] = useState<Record<string, SafeAny>[]>([])
+
+  // Context Capture Form States
+  const [businessProblem, setBusinessProblem] = useState('')
+  const [analysisGoal, setAnalysisGoal] = useState('Revenue Growth')
+  const [successMetric, setSuccessMetric] = useState('Revenue')
+
+  // Strategy Checklist State
+  const [strategyRunning, setStrategyRunning] = useState(false)
+  const [checkedSteps, setCheckedSteps] = useState<number>(0)
+  const [contextSaving, setContextSaving] = useState(false)
 
   const fetchDatasets = useCallback(async () => {
     try {
@@ -37,6 +54,26 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
     fetchDatasets()
   }, [fetchDatasets])
 
+  // Strategy Checklist Tick Animation
+  useEffect(() => {
+    if (viewMode !== 'strategy') return
+    setStrategyRunning(true)
+    setCheckedSteps(0)
+    
+    const interval = setInterval(() => {
+      setCheckedSteps(prev => {
+        if (prev >= 6) {
+          clearInterval(interval)
+          setStrategyRunning(false)
+          return 6
+        }
+        return prev + 1
+      })
+    }, 600)
+
+    return () => clearInterval(interval)
+  }, [viewMode])
+
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     if (!window.confirm('Are you sure you want to delete this dataset?')) return
@@ -50,10 +87,13 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
   }
 
   const handleSelectDataset = (ds: SafeAny) => {
-    onDatasetLoaded(ds.id || ds.dataset_id, ds.name, {
+    setActiveDatasetId(ds.id || ds.dataset_id)
+    setActiveDatasetName(ds.name)
+    setActiveDatasetMeta({
       rows: ds.rows,
       columns: ds.columns,
     })
+    setViewMode('capture')
   }
 
   const handleFile = useCallback(async (file: File) => {
@@ -64,7 +104,6 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
     setProgress(10)
 
     try {
-      // Simulate progress stages
       const progressTimer = setInterval(() => {
         setProgress(p => Math.min(p + 15, 85))
       }, 400)
@@ -76,13 +115,16 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
       setResult(data)
       setDiagnostics(data.diagnostics || null)
 
-      // Auto-navigate after a longer delay so diagnostics are readable
+      // Auto-navigate to problem capture after a short delay
       setTimeout(() => {
-        onDatasetLoaded(data.dataset_id, data.name, {
+        setActiveDatasetId(data.dataset_id)
+        setActiveDatasetName(data.name)
+        setActiveDatasetMeta({
           rows: data.rows,
           columns: data.columns,
         })
-      }, 5000)
+        setViewMode('capture')
+      }, 3000)
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setError(err.message)
@@ -94,7 +136,7 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
     } finally {
       setUploading(false)
     }
-  }, [onDatasetLoaded])
+  }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -106,6 +148,286 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(true)
+  }
+
+  const presets = [
+    {
+      label: 'Reduce Customer Churn',
+      problem: 'Analyze repeat purchase rates and RFM cohorts to identify customer segments with highest churn risk and decline in loyalty.',
+      goal: 'Customer Intelligence',
+      metric: 'Churn Rate',
+    },
+    {
+      label: 'Grow Sales Revenue',
+      problem: 'Audit temporal sales trends, top product contributions, and high-value orders to identify key pricing and growth opportunities.',
+      goal: 'Revenue Growth',
+      metric: 'Revenue',
+    },
+    {
+      label: 'Optimize Marketing Spend',
+      problem: 'Examine campaigns and promotional conversion patterns to optimize return on marketing investments and traffic cost efficiency.',
+      goal: 'Marketing Analytics',
+      metric: 'ROAS',
+    },
+    {
+      label: 'Enhance Operations',
+      problem: 'Diagnose processing anomalies, bottlenecks, and inventory safety stock limits to reduce average transaction cycle time.',
+      goal: 'Operational Efficiency',
+      metric: 'Cycle Time',
+    }
+  ]
+
+  const applyPreset = (preset: typeof presets[0]) => {
+    setBusinessProblem(preset.problem)
+    setAnalysisGoal(preset.goal)
+    setSuccessMetric(preset.metric)
+  }
+
+  const strategySteps = [
+    'Scan dataset headers and columns to detect data schema semantics.',
+    `Filter and align KPIs with target success metric: "${successMetric}".`,
+    `Prioritize RFM concentration profiles matching the goal: "${analysisGoal}".`,
+    'Apply 3-sigma and IQR models to isolate transaction anomalies.',
+    'Formulate 90-day scenarios (expected growth vectors vs downside limits).',
+    'Structure 30-60-90 day implementation roadmap recommendations.'
+  ]
+
+  // Render different sub-screens based on viewMode
+  if (viewMode === 'capture') {
+    return (
+      <div className="animate-fade-in max-w-2xl mx-auto py-6">
+        <div className="page-header text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-3"
+               style={{ background: 'var(--color-primary-50)', color: 'var(--color-primary)' }}>
+            <Sparkles size={14} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Step 2: Define Context</span>
+          </div>
+          <h1 className="page-title text-2xl font-extrabold" style={{ color: 'var(--color-text-primary)' }}>Define Business Objective</h1>
+          <p className="page-subtitle text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            Tailor the analytical models and AI strategy to your specific business problem
+          </p>
+        </div>
+
+        <div className="card card-body space-y-6 shadow-xl border" style={{ borderColor: 'var(--color-border)', borderRadius: '16px', background: 'var(--color-surface)' }}>
+          <div>
+            <label className="block text-sm font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+              What business problem are you trying to solve?
+            </label>
+            <textarea
+              className="w-full p-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              style={{ 
+                background: 'var(--color-surface)', 
+                borderColor: 'var(--color-border)', 
+                color: 'var(--color-text-primary)',
+                minHeight: '100px'
+              }}
+              placeholder="E.g., We want to understand customer loyalty factors and reduce retention leakage..."
+              value={businessProblem}
+              onChange={(e) => setBusinessProblem(e.target.value)}
+            />
+            <div className="mt-3">
+              <span className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>Quick Presets:</span>
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                {presets.map((p, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => applyPreset(p)}
+                    className="text-xs px-3 py-1.5 rounded-full border transition-all hover:bg-slate-100 font-medium"
+                    style={{ 
+                      background: 'var(--color-surface)', 
+                      borderColor: 'var(--color-border)',
+                      color: 'var(--color-text-secondary)'
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                Analysis Goal
+              </label>
+              <select
+                className="w-full p-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{ 
+                  background: 'var(--color-surface)', 
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text-primary)'
+                }}
+                value={analysisGoal}
+                onChange={(e) => setAnalysisGoal(e.target.value)}
+              >
+                <option>Revenue Growth</option>
+                <option>Customer Intelligence</option>
+                <option>Marketing Analytics</option>
+                <option>Operational Efficiency</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                Primary Success Metric
+              </label>
+              <input
+                type="text"
+                className="w-full p-3 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{ 
+                  background: 'var(--color-surface)', 
+                  borderColor: 'var(--color-border)',
+                  color: 'var(--color-text-primary)'
+                }}
+                placeholder="E.g., Churn Rate, MRR, ROAS"
+                value={successMetric}
+                onChange={(e) => setSuccessMetric(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+            <button
+              onClick={() => setViewMode('upload')}
+              className="btn btn-secondary text-sm px-4 py-2"
+            >
+              Back to Upload
+            </button>
+            <button
+              onClick={() => {
+                if (!businessProblem.trim()) {
+                  alert('Please enter a business problem statement or select a quick preset.');
+                  return;
+                }
+                setViewMode('strategy');
+              }}
+              className="btn btn-primary text-sm px-5 py-2 flex items-center gap-1.5"
+              disabled={!businessProblem.trim()}
+            >
+              Formulate Strategy <ArrowRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (viewMode === 'strategy') {
+    return (
+      <div className="animate-fade-in max-w-2xl mx-auto py-6">
+        <div className="page-header text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
+               style={{ background: 'var(--color-primary-50)', color: 'var(--color-primary)' }}>
+            <Sparkles size={14} />
+            <span className="text-[10px] font-bold uppercase tracking-wider">Step 3: AI Analysis Strategy</span>
+          </div>
+          <h1 className="page-title text-2xl font-extrabold" style={{ color: 'var(--color-text-primary)' }}>AI Analysis Strategy Formulation</h1>
+          <p className="page-subtitle text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            InsightIQ is generating a targeted analytical plan based on your business objective
+          </p>
+        </div>
+
+        <div className="card card-body space-y-6 shadow-xl border" style={{ borderColor: 'var(--color-border)', borderRadius: '16px', background: 'var(--color-surface)' }}>
+          <div className="p-4 rounded-xl space-y-2.5 shadow-sm" style={{ background: 'var(--color-surface-hover)', border: '1px solid var(--color-border)' }}>
+            <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: 'var(--color-border-light)' }}>
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Stated Business Problem</span>
+              <span className="badge badge-info text-xs">{analysisGoal}</span>
+            </div>
+            <div className="text-sm font-semibold italic" style={{ color: 'var(--color-text-primary)' }}>
+              "{businessProblem}"
+            </div>
+            <div className="text-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--color-success)' }}>
+              <CheckCircle size={14} /> Success Metric Focus: {successMetric}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">AI Tactical Analysis Plan</h3>
+            <div className="space-y-3">
+              {strategySteps.map((step, idx) => {
+                const isChecked = checkedSteps > idx;
+                const isCurrent = checkedSteps === idx;
+                return (
+                  <div 
+                    key={idx} 
+                    className="flex items-start gap-3 p-3 rounded-lg border transition-all duration-300"
+                    style={{ 
+                      background: isChecked ? 'rgba(5, 150, 105, 0.02)' : isCurrent ? 'rgba(37, 99, 235, 0.02)' : 'var(--color-surface)',
+                      borderColor: isChecked ? 'rgba(5, 150, 105, 0.15)' : isCurrent ? 'rgba(37, 99, 235, 0.2)' : 'var(--color-border)',
+                      opacity: isChecked || isCurrent ? 1 : 0.5
+                    }}
+                  >
+                    <div className="mt-0.5 flex-shrink-0">
+                      {isChecked ? (
+                        <CheckCircle size={18} className="text-emerald-600 animate-scale-in" />
+                      ) : isCurrent ? (
+                        <Loader2 size={18} className="text-blue-600 animate-spin" />
+                      ) : (
+                        <div className="w-[18px] h-[18px] rounded-full border border-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div 
+                        className="text-sm font-medium" 
+                        style={{ 
+                          color: isChecked ? 'var(--color-success)' : isCurrent ? 'var(--color-primary)' : 'var(--color-text-secondary)'
+                        }}
+                      >
+                        {step}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: 'var(--color-border-light)' }}>
+            <button
+              onClick={() => setViewMode('capture')}
+              className="btn btn-secondary text-sm px-4 py-2"
+              disabled={contextSaving || strategyRunning}
+            >
+              Change Objective
+            </button>
+            <button
+              onClick={async () => {
+                if (!activeDatasetId) return;
+                setContextSaving(true);
+                try {
+                  await updateDatasetContext(activeDatasetId, {
+                    business_problem: businessProblem,
+                    analysis_goal: analysisGoal,
+                    success_metric: successMetric
+                  });
+                  onDatasetLoaded(activeDatasetId, activeDatasetName, activeDatasetMeta);
+                } catch (err) {
+                  console.error('Failed to save context:', err);
+                  alert('Failed to register analysis objective. Transitioning to dashboard.');
+                  onDatasetLoaded(activeDatasetId, activeDatasetName, activeDatasetMeta);
+                } finally {
+                  setContextSaving(false);
+                }
+              }}
+              className="btn btn-primary text-sm px-5 py-2 flex items-center gap-1.5"
+              disabled={strategyRunning || contextSaving}
+            >
+              {contextSaving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Ingesting Analytics...
+                </>
+              ) : (
+                <>
+                  Launch Context-Driven Dashboard <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -309,7 +631,7 @@ function SuccessView({ result }: { result: SafeAny }) {
         Analysis Complete!
       </div>
       <div className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-        Redirecting to your dashboard...
+        Preparing business capture...
       </div>
       <div className="flex flex-wrap justify-center gap-3">
         <div className="badge badge-success">{Number(result.rows || 0).toLocaleString()} rows</div>

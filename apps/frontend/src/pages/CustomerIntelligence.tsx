@@ -4,11 +4,11 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getCustomerIntelligence, getDataset } from '../lib/api'
+import { getCustomerIntelligence, getDataset, getCharts, generateCustomChart, getDatasetPreview } from '../lib/api'
 import { 
   Users, Award, TrendingUp, BarChart3, 
   UsersRound, FileText, Heart, X, Loader2, Info,
-  Edit2, Save, FileSpreadsheet, PinOff
+  Edit2, Save, FileSpreadsheet, PinOff, AlertTriangle
 } from 'lucide-react'
 import { 
   BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -124,8 +124,15 @@ export default function CustomerIntelligence({ datasetId }: Props) {
   const [xAxis, setXAxis] = useState('')
   const [yAxis, setYAxis] = useState('')
   const [generatingCustom, setGeneratingCustom] = useState(false)
+  const [studioError, setStudioError] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  useEffect(() => {
+    if (!showStudio) {
+      setStudioError(null)
+    }
+  }, [showStudio])
+
+  const { data, isLoading, error: customerError } = useQuery({
     queryKey: ['customer-intelligence', datasetId],
     queryFn: () => getCustomerIntelligence(datasetId!),
     enabled: !!datasetId,
@@ -137,72 +144,61 @@ export default function CustomerIntelligence({ datasetId }: Props) {
     enabled: !!datasetId,
   })
 
-  const { data: chartsData, isLoading: chartsLoading } = useQuery({
+  const { data: chartsData, isLoading: chartsLoading, error: chartsError } = useQuery({
     queryKey: ['charts-customer', datasetId],
     queryFn: async () => {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000)
       try {
-        const res = await fetch(`/api/analytics/${datasetId}/charts?dashboard=customer`, {
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
-        if (!res.ok) throw new Error('Failed to fetch charts')
-        return res.json()
+        return await getCharts(datasetId!, 'customer')
       } catch (err) {
-        clearTimeout(timeoutId)
-        console.warn('Customer charts query failed or timed out. Building from preview data.', err)
+        console.warn('Customer charts query failed. Building from preview data.', err)
         try {
-          const previewRes = await fetch(`/api/datasets/${datasetId}/preview`)
-          if (previewRes.ok) {
-            const preview = await previewRes.json()
-            const columns = preview.columns || []
-            const rows = preview.rows || []
-            const numCols = columns.filter((c: any) => c.type === 'numeric' || c.type === 'integer' || c.type === 'float')
-            const catCols = columns.filter((c: any) => c.type === 'categorical')
-            const fallbackCharts: any[] = []
-            if (catCols.length > 0 && numCols.length > 0 && rows.length > 0) {
-              const catName = catCols[0].name
-              const metricName = numCols[0].name
-              const grouped: Record<string, number> = {}
-              rows.forEach((r: any) => {
-                const key = String(r[catName] || 'Unknown')
-                grouped[key] = (grouped[key] || 0) + (Number(r[metricName]) || 0)
-              })
-              const sorted = Object.entries(grouped).sort((a, b) => b[1] - a[1]).slice(0, 8)
-              fallbackCharts.push({
-                type: 'bar',
-                title: `${metricName} by ${catName}`,
-                x_axis: catName, y_axis: metricName,
-                insight: `Live preview: ${metricName} aggregated by ${catName}.`,
-                data: sorted.map(([name, value]) => ({ name, value: Math.round(value) }))
-              })
-            }
-            if (catCols.length > 0 && rows.length > 0) {
-              const catName = catCols[0].name
-              const counts: Record<string, number> = {}
-              rows.forEach((r: any) => { const v = String(r[catName] || 'Unknown'); counts[v] = (counts[v] || 0) + 1 })
-              const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
-              fallbackCharts.push({
-                type: 'bar',
-                title: `Record Count by ${catName}`,
-                x_axis: catName, y_axis: 'Records',
-                insight: `Live preview: record distribution across ${catName}.`,
-                data: sorted.map(([name, value]) => ({ name, value }))
-              })
-            }
+          const preview = await getDatasetPreview(datasetId!) as any
+          const columns = preview.columns || []
+          const rows = preview.rows || []
+          const numCols = columns.filter((c: any) => c.type === 'numeric' || c.type === 'integer' || c.type === 'float')
+          const catCols = columns.filter((c: any) => c.type === 'categorical')
+          const fallbackCharts: any[] = []
+          if (catCols.length > 0 && numCols.length > 0 && rows.length > 0) {
+            const catName = catCols[0].name
+            const metricName = numCols[0].name
+            const grouped: Record<string, number> = {}
+            rows.forEach((r: any) => {
+              const key = String(r[catName] || 'Unknown')
+              grouped[key] = (grouped[key] || 0) + (Number(r[metricName]) || 0)
+            })
+            const sorted = Object.entries(grouped).sort((a, b) => b[1] - a[1]).slice(0, 8)
             fallbackCharts.push({
               type: 'bar',
-              title: 'Column Completeness',
-              x_axis: 'Column', y_axis: 'Non-Null Records',
-              insight: 'Data completeness from live preview.',
-              data: columns.slice(0, 8).map((c: any) => ({
-                name: c.name.length > 15 ? c.name.substring(0, 15) : c.name,
-                value: rows.filter((r: any) => r[c.name] != null && r[c.name] !== '').length
-              }))
+              title: `${metricName} by ${catName}`,
+              x_axis: catName, y_axis: metricName,
+              insight: `Live preview: ${metricName} aggregated by ${catName}.`,
+              data: sorted.map(([name, value]) => ({ name, value: Math.round(value) }))
             })
-            return { charts: fallbackCharts }
           }
+          if (catCols.length > 0 && rows.length > 0) {
+            const catName = catCols[0].name
+            const counts: Record<string, number> = {}
+            rows.forEach((r: any) => { const v = String(r[catName] || 'Unknown'); counts[v] = (counts[v] || 0) + 1 })
+            const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8)
+            fallbackCharts.push({
+              type: 'bar',
+              title: `Record Count by ${catName}`,
+              x_axis: catName, y_axis: 'Records',
+              insight: `Live preview: record distribution across ${catName}.`,
+              data: sorted.map(([name, value]) => ({ name, value }))
+            })
+          }
+          fallbackCharts.push({
+            type: 'bar',
+            title: 'Column Completeness',
+            x_axis: 'Column', y_axis: 'Non-Null Records',
+            insight: 'Data completeness from live preview.',
+            data: columns.slice(0, 8).map((c: any) => ({
+              name: c.name.length > 15 ? c.name.substring(0, 15) : c.name,
+              value: rows.filter((r: any) => r[c.name] != null && r[c.name] !== '').length
+            }))
+          })
+          return { charts: fallbackCharts }
         } catch { /* preview failed */ }
         return { charts: [] }
       }
@@ -210,8 +206,18 @@ export default function CustomerIntelligence({ datasetId }: Props) {
     enabled: !!datasetId,
   })
 
+  const error = customerError || chartsError
   if (!datasetId) return <NoDataset />
   if (isLoading || chartsLoading) return <LoadingState />
+  if (error) {
+    return (
+      <div className="text-center py-20 animate-fade-in">
+        <AlertTriangle size={48} style={{ color: 'var(--color-warning)', margin: '0 auto 1rem' }} />
+        <h2 className="font-bold text-xl mb-2">Something went wrong</h2>
+        <p style={{ color: 'var(--color-text-secondary)' }}>{(error as Error).message || 'Failed to load Customer Intelligence.'}</p>
+      </div>
+    )
+  }
   if (!data) return null
 
   if (!data.eligible) {
@@ -706,6 +712,12 @@ export default function CustomerIntelligence({ datasetId }: Props) {
                     </div>
                   )}
 
+                  {studioError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-[10px] text-red-600 font-semibold leading-relaxed">
+                      ⚠️ {studioError}
+                    </div>
+                  )}
+
                   <div className="p-3 bg-blue-50/20 border border-blue-100/30 rounded-xl text-[10px] text-slate-500 leading-relaxed">
                     💡 <strong>Tip:</strong> Selecting Recommended configurations ensures optimal visual clarity and correct data aggregation formats.
                   </div>
@@ -716,22 +728,14 @@ export default function CustomerIntelligence({ datasetId }: Props) {
                     onClick={async () => {
                       if (!selectedType) return
                       setGeneratingCustom(true)
+                      setStudioError(null)
                       try {
-                        const token = localStorage.getItem('insightiq_token')
-                        const headers: Record<string, string> = {}
-                        if (token) {
-                          headers['Authorization'] = `Bearer ${token}`
-                        }
-                        const res = await fetch(
-                          `/api/analytics/${datasetId}/generate-custom-chart?type=${selectedType}&x_axis=${xAxis}&y_axis=${yAxis}`,
-                          { method: 'POST', headers }
-                        )
-                        if (!res.ok) throw new Error('Failed to generate chart')
-                        const chartObj = await res.json()
+                        const chartObj = await generateCustomChart(datasetId!, selectedType, xAxis, yAxis)
                         saveCustomCharts([...customCharts, chartObj])
                         setShowStudio(false)
-                      } catch (err) {
+                      } catch (err: any) {
                         console.error('Failed to generate custom chart:', err)
+                        setStudioError(err.message || 'Failed to generate custom chart.')
                       } finally {
                         setGeneratingCustom(false)
                       }

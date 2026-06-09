@@ -87,7 +87,7 @@ export default function AIChat({ datasetId }: Props) {
     <div className="animate-fade-in h-[calc(100vh-8rem)] flex flex-col">
       <div className="page-header mb-4">
         <h1 className="page-title">AI Analyst Chat</h1>
-        <p className="page-subtitle">Ask questions in natural language. Powered by Google Gemini.</p>
+        <p className="page-subtitle">Ask questions in natural language. Powered by InsightIQ AI.</p>
       </div>
 
       <div className="card flex-1 flex flex-col overflow-hidden">
