@@ -84,8 +84,8 @@ export default function AIChat({ datasetId }: Props) {
   }
 
   return (
-    <div className="animate-fade-in h-[calc(100vh-8rem)] flex flex-col">
-      <div className="page-header mb-4">
+    <div className="animate-fade-in h-[calc(100vh-6rem)] sm:h-[calc(100vh-11rem)] flex flex-col">
+      <div className="page-header mb-4 sm:block hidden">
         <h1 className="page-title">AI Analyst Chat</h1>
         <p className="page-subtitle">Ask questions in natural language. Powered by InsightIQ AI.</p>
       </div>

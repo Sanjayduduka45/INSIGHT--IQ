@@ -934,33 +934,35 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
                         <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Variance Steps</div>
                         {rc.waterfall && rc.waterfall.length > 0 ? (
                           <div className="bg-white border border-slate-200/60 rounded-lg shadow-sm overflow-hidden">
-                            <table className="w-full text-xs text-left">
-                              <thead className="bg-slate-50 border-b border-slate-200/60">
-                                <tr>
-                                  <th className="px-3 py-2 text-slate-500 font-bold text-[10px] uppercase">Waterfall Step</th>
-                                  <th className="px-3 py-2 text-right text-slate-500 font-bold text-[10px] uppercase">Delta / Total</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {rc.waterfall.map((step: any, sIdx: number) => {
-                                  const isTotal = sIdx === 0 || sIdx === rc.waterfall.length - 1
-                                  const isPositive = step.value > 0
-                                  return (
-                                    <tr key={sIdx} className={isTotal ? 'bg-slate-50 font-bold text-slate-800' : ''}>
-                                      <td className="px-3 py-2 text-slate-600 font-medium">{step.name}</td>
-                                      <td className={`px-3 py-2 text-right ${
-                                        isTotal ? 'text-slate-800' :
-                                        isPositive ? 'text-emerald-600 font-semibold' :
-                                        'text-red-600 font-semibold'
-                                      }`}>
-                                        {isTotal ? '' : isPositive ? '+' : ''}
-                                        {formatPerformerValue(step.value, rc.metric)}
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
+                            <div className="overflow-x-auto w-full">
+                              <table className="w-full text-xs text-left min-w-[280px]">
+                                <thead className="bg-slate-50 border-b border-slate-200/60">
+                                  <tr>
+                                    <th className="px-3 py-2 text-slate-500 font-bold text-[10px] uppercase">Waterfall Step</th>
+                                    <th className="px-3 py-2 text-right text-slate-500 font-bold text-[10px] uppercase">Delta / Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {rc.waterfall.map((step: any, sIdx: number) => {
+                                    const isTotal = sIdx === 0 || sIdx === rc.waterfall.length - 1
+                                    const isPositive = step.value > 0
+                                    return (
+                                      <tr key={sIdx} className={isTotal ? 'bg-slate-50 font-bold text-slate-800' : ''}>
+                                        <td className="px-3 py-2 text-slate-600 font-medium">{step.name}</td>
+                                        <td className={`px-3 py-2 text-right ${
+                                          isTotal ? 'text-slate-800' :
+                                          isPositive ? 'text-emerald-600 font-semibold' :
+                                          'text-red-600 font-semibold'
+                                        }`}>
+                                          {isTotal ? '' : isPositive ? '+' : ''}
+                                          {formatPerformerValue(step.value, rc.metric)}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
                         ) : (
                           <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600 font-medium">

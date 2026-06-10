@@ -76,8 +76,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-        {/* Navigation Sidebar */}
-        <div className="flex flex-col gap-1.5 md:col-span-1">
+        <div className="flex flex-row md:flex-col gap-1.5 overflow-x-auto pb-2 md:pb-0 md:col-span-1 whitespace-nowrap scrollbar-none">
           <button
             onClick={() => setActiveTab('profile')}
             className={`flex items-center gap-2.5 px-4 py-3 text-sm font-semibold rounded-xl transition-all ${
@@ -197,8 +196,8 @@ export default function SettingsPage() {
                   Recent Activity & Data History
                 </h4>
                 <p className="text-xs text-slate-500 mb-4">View your recent file uploads, analysis executions, and report compilations.</p>
-                <div className="overflow-hidden rounded-xl border border-slate-150 dark:border-slate-800">
-                  <table className="w-full text-left text-xs border-collapse">
+                <div className="overflow-x-auto w-full rounded-xl border border-slate-150 dark:border-slate-800">
+                  <table className="w-full text-left text-xs border-collapse min-w-[500px]">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-150 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">
                         <th className="p-3">Event / Action</th>

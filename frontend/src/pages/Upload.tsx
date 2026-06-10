@@ -441,10 +441,8 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
 
       {/* Drop Zone */}
       <div
-        className="card cursor-pointer transition-all"
+        className="card cursor-pointer transition-all p-8 sm:p-16 text-center"
         style={{
-          padding: '4rem 2rem',
-          textAlign: 'center',
           border: isDragging ? '2px dashed var(--color-primary)' : '2px dashed var(--color-border)',
           background: isDragging ? 'var(--color-primary-50)' : 'var(--color-surface)',
         }}
@@ -584,7 +582,7 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
                       <span>{ds.columns} cols</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-shrink-0">
                     <button
                       onClick={(e) => handleDelete(e, ds.id)}
                       className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"

@@ -477,7 +477,7 @@ export default function CustomerIntelligence({ datasetId }: Props) {
           Top Customer Segment Profiling Directory
         </h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left">
+          <table className="w-full text-xs text-left min-w-[700px]">
             <thead>
               <tr className="border-b text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5">Rank</th>

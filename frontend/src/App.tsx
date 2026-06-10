@@ -52,7 +52,22 @@ const NAV_ITEMS = [
 ]
 
 export default function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    setSidebarOpen(window.innerWidth >= 1024)
+    
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(true)
+      } else {
+        setSidebarOpen(false)
+      }
+    }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
   const [datasetId, setDatasetId] = useState<string | null>(null)
   const [datasetName, setDatasetName] = useState<string>('')
   const [datasetMeta, setDatasetMeta] = useState<SafeAny>(null)
@@ -129,8 +144,17 @@ export default function App() {
     <div className="flex flex-col min-h-screen" style={{ background: 'var(--color-bg)' }}>
       
       {/* ── Global Header ────────────────────────────────────────────── */}
-      <header className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 z-40 flex items-center justify-between px-6 font-sans">
-        <div className="flex items-center gap-6">
+      <header className="fixed top-0 left-0 w-full h-16 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 z-40 flex items-center justify-between px-4 sm:px-6 font-sans">
+        <div className="flex items-center gap-3">
+          {/* Mobile menu toggle inside header */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1.5 rounded-lg lg:hidden hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-650 dark:text-slate-350 cursor-pointer"
+            aria-label="Toggle Navigation Menu"
+          >
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          
           <Link to="/" className="flex items-center gap-2.5">
             <img src="/logo.png" alt="InsightIQ Logo" className="w-8 h-8 object-contain rounded-lg shadow-sm" />
             <span className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white">
@@ -248,6 +272,14 @@ export default function App() {
       </header>
 
       <div className="flex flex-1">
+        {/* Mobile Sidebar Backdrop Overlay */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/60 z-40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* ── Sidebar ────────────────────────────────────────────────── */}
         <aside
           className={`sidebar transition-transform duration-300 ${
@@ -261,6 +293,11 @@ export default function App() {
                 key={path}
                 to={path}
                 end={path === '/'}
+                onClick={() => {
+                  if (window.innerWidth < 1024) {
+                    setSidebarOpen(false)
+                  }
+                }}
                 className={({ isActive }) =>
                   `sidebar-link ${isActive ? 'active' : ''}`
                 }
@@ -297,14 +334,6 @@ export default function App() {
 
         {/* ── Main Content ───────────────────────────────────────────── */}
         <main className="page-wrapper flex-1">
-          {/* Mobile menu toggle */}
-          <button
-            className="fixed top-4 left-4 z-50 p-2 rounded-lg lg:hidden"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
 
           <Routes>
             <Route path="/" element={<HomePage datasetId={datasetId} onNavigate={(path: string) => navigate(path)} />} />

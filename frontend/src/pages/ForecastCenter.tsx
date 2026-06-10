@@ -256,7 +256,7 @@ export default function ForecastCenter({ datasetId }: Props) {
               </div>
             </div>
 
-            <div style={{ height: 400, width: '100%' }}>
+            <div className="h-[260px] sm:h-[400px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
