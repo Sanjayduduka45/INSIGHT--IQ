@@ -68,7 +68,7 @@ htmlcov/
 .env
 .env.local
 .env.*.local
-.env.example
+
 
 # FAISS
 *.index
@@ -89,3 +89,5 @@ docs/_build/
 **/.env
 uploads/
 INSIGHT--IQ/
+
+DEPLOYMENT.md
