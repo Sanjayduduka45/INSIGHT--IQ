@@ -58,9 +58,7 @@ export default function App() {
   const [datasetMeta, setDatasetMeta] = useState<SafeAny>(null)
   
   // Modals & Splash states
-  const [splashActive, setSplashActive] = useState(() => {
-    return !sessionStorage.getItem('insightiq_splash_shown')
-  })
+  const [splashActive, setSplashActive] = useState(false)
   const [showSignUpModal, setShowSignUpModal] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'signup'>('login')
