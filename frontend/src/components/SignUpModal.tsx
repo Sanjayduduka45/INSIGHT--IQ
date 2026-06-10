@@ -1,4 +1,4 @@
-import { X, CheckCircle2, Shield } from 'lucide-react'
+import { X, CheckCircle2 } from 'lucide-react'
 
 interface SignUpModalProps {
   isOpen: boolean
@@ -44,9 +44,7 @@ export default function SignUpModal({
 
         {/* Brand/Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-600/10 text-blue-600 dark:text-blue-400 mx-auto mb-4">
-            <Shield size={24} />
-          </div>
+          <img src="/logo.png" alt="InsightIQ Logo" className="w-12 h-12 object-contain rounded-xl mx-auto mb-4 shadow-sm" />
           <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
             Unlock Full InsightIQ
           </h2>
