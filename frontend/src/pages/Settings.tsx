@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { User, Bell, Sparkles, Download, LayoutGrid, CheckCircle, Save, Building, Clock } from 'lucide-react'
+import { useAuth } from '../lib/auth'
 
 export default function SettingsPage() {
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'ai' | 'notifications' | 'export'>('profile')
 
   const [saved, setSaved] = useState(false)
@@ -9,7 +11,7 @@ export default function SettingsPage() {
   // Profile State
   const [profile, setProfile] = useState({
     name: localStorage.getItem('user_name') || '',
-    email: localStorage.getItem('user_email') || '',
+    email: localStorage.getItem('user_email') || user?.email || '',
     role: localStorage.getItem('user_role') || '',
     org: localStorage.getItem('user_org') || ''
   })

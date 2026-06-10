@@ -96,10 +96,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: 'user',
       }
       const mockToken = 'mock-jwt-token-for-dev-environment'
+      
+      // Clear old profile fields
+      localStorage.removeItem('user_name')
+      localStorage.removeItem('user_email')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_org')
+
       setUser(mockUser)
       setToken(mockToken)
       localStorage.setItem('insightiq_user', JSON.stringify(mockUser))
       localStorage.setItem('insightiq_token', mockToken)
+      localStorage.setItem('user_email', email)
       return
     }
 
@@ -120,10 +128,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: data.user.email || '',
         role: data.user.role || 'user',
       }
+
+      // Clear old profile fields
+      localStorage.removeItem('user_name')
+      localStorage.removeItem('user_email')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_org')
+
       setUser(activeUser)
       setToken(data.session.access_token)
       localStorage.setItem('insightiq_user', JSON.stringify(activeUser))
       localStorage.setItem('insightiq_token', data.session.access_token)
+      localStorage.setItem('user_email', activeUser.email)
     }
   }
 
@@ -139,10 +155,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: 'user',
       }
       const mockToken = 'mock-jwt-token-for-dev-environment'
+
+      // Clear old profile fields
+      localStorage.removeItem('user_name')
+      localStorage.removeItem('user_email')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_org')
+
       setUser(mockUser)
       setToken(mockToken)
       localStorage.setItem('insightiq_user', JSON.stringify(mockUser))
       localStorage.setItem('insightiq_token', mockToken)
+      localStorage.setItem('user_email', email)
       return
     }
 
@@ -165,10 +189,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: data.user.email || '',
         role: data.user.role || 'user',
       }
+
+      // Clear old profile fields
+      localStorage.removeItem('user_name')
+      localStorage.removeItem('user_email')
+      localStorage.removeItem('user_role')
+      localStorage.removeItem('user_org')
+
       setUser(activeUser)
       setToken(data.session.access_token)
       localStorage.setItem('insightiq_user', JSON.stringify(activeUser))
       localStorage.setItem('insightiq_token', data.session.access_token)
+      localStorage.setItem('user_email', activeUser.email)
     } else if (data.user) {
       // Supabase signUp succeeded but requires email confirmation
       if (data.user.identities && data.user.identities.length === 0) {
@@ -201,6 +233,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null)
     localStorage.removeItem('insightiq_user')
     localStorage.removeItem('insightiq_token')
+    localStorage.removeItem('user_name')
+    localStorage.removeItem('user_email')
+    localStorage.removeItem('user_role')
+    localStorage.removeItem('user_org')
   }
 
   const resetPassword = async (email: string) => {
