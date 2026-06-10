@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Upload as UploadIcon, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X, Database, ArrowRight, Trash2, Sparkles } from 'lucide-react'
-import { uploadDataset, listDatasets, deleteDataset, updateDatasetContext, ApiError } from '../lib/api'
+import { uploadDataset, listDatasets, deleteDataset, updateDatasetContext, ApiError, logUserActivity } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import type { SafeAny } from '../types'
 
@@ -116,6 +116,7 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
       setProgress(100)
       setResult(data)
       setDiagnostics(data.diagnostics || null)
+      logUserActivity('Dataset Upload', file.name)
 
       // Auto-navigate to problem capture after a short delay
       setTimeout(() => {

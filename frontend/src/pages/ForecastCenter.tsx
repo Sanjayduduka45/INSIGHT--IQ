@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getForecastableColumns, generateForecast } from '../lib/api'
+import { getForecastableColumns, generateForecast, logUserActivity } from '../lib/api'
 import { TrendingUp, Calendar, Save, Share, AlertTriangle } from 'lucide-react'
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, Legend } from 'recharts'
 import type { SafeAny } from '../types'
@@ -64,7 +64,13 @@ export default function ForecastCenter({ datasetId }: Props) {
 
   const { data: forecast, isLoading: forecastLoading, error: forecastError } = useQuery({
     queryKey: ['forecast', datasetId, selectedMetric, selectedDateCol],
-    queryFn: () => generateForecast(datasetId!, selectedMetric || '', '7,30,90', selectedDateCol),
+    queryFn: async () => {
+      const res = await generateForecast(datasetId!, selectedMetric || '', '7,30,90', selectedDateCol)
+      if (res && res.metric) {
+        logUserActivity('AI Forecast Run', `${res.metric} [${res.date_column || 'Time'}]`)
+      }
+      return res
+    },
     enabled: !!datasetId && (!!selectedMetric || (!!forecastable && (forecastable.forecastable?.length || 0) > 0)),
     retry: false
   })

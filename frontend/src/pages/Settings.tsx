@@ -1,12 +1,35 @@
-import { useState } from 'react'
-import { User, Bell, Sparkles, Download, LayoutGrid, CheckCircle, Save, Building, Clock } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { User, Bell, Sparkles, Download, LayoutGrid, CheckCircle, Save, Building, Clock, Calendar } from 'lucide-react'
 import { useAuth } from '../lib/auth'
+import { getUserActivities } from '../lib/api'
+import type { UserActivity } from '../lib/api'
+
+function getRelativeTimeString(dateString: string): string {
+  try {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffSec = Math.floor(diffMs / 1000)
+    const diffMin = Math.floor(diffSec / 60)
+    const diffHr = Math.floor(diffMin / 60)
+    const diffDays = Math.floor(diffHr / 24)
+
+    if (diffSec < 10) return 'Just now'
+    if (diffSec < 60) return `${diffSec} secs ago`
+    if (diffMin < 60) return `${diffMin} min${diffMin > 1 ? 's' : ''} ago`
+    if (diffHr < 24) return `${diffHr} hr${diffHr > 1 ? 's' : ''} ago`
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
+  } catch (e) {
+    return 'Recently'
+  }
+}
 
 export default function SettingsPage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<'profile' | 'workspace' | 'ai' | 'notifications' | 'export'>('profile')
 
   const [saved, setSaved] = useState(false)
+  const [activities, setActivities] = useState<UserActivity[]>([])
 
   // Profile State
   const [profile, setProfile] = useState({
@@ -15,6 +38,14 @@ export default function SettingsPage() {
     role: localStorage.getItem('user_role') || '',
     org: localStorage.getItem('user_org') || ''
   })
+
+  // Sync user email if it loads later
+  useEffect(() => {
+    if (user?.email && !profile.email) {
+      setProfile(prev => ({ ...prev, email: user.email || '' }))
+    }
+    setActivities(getUserActivities())
+  }, [user])
 
   // Workspace State
   const [workspace, setWorkspace] = useState({
@@ -204,37 +235,41 @@ export default function SettingsPage() {
                   Recent Activity & Data History
                 </h4>
                 <p className="text-xs text-slate-500 mb-4">View your recent file uploads, analysis executions, and report compilations.</p>
-                <div className="overflow-x-auto w-full rounded-xl border border-slate-150 dark:border-slate-800">
-                  <table className="w-full text-left text-xs border-collapse min-w-[500px]">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-150 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">
-                        <th className="p-3">Event / Action</th>
-                        <th className="p-3">Target Asset</th>
-                        <th className="p-3">Status</th>
-                        <th className="p-3">Timestamp</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350">
-                      {[
-                        { event: 'PowerPoint Export', asset: 'sample_sales.csv', status: 'Success', time: '10 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
-                        { event: 'PDF Report Generation', asset: 'sample_sales.csv', status: 'Success', time: '14 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
-                        { event: 'Dataset Upload', asset: 'sample_sales.csv (24.5 KB)', status: 'Success', time: '22 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
-                        { event: 'AI Forecast Run', asset: 'sample_sales.csv [Revenue]', status: 'Success', time: '40 mins ago', color: 'bg-emerald-500/10 text-emerald-600' },
-                      ].map((act, i) => (
-                        <tr key={i} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors">
-                          <td className="p-3 font-semibold text-slate-900 dark:text-white">{act.event}</td>
-                          <td className="p-3 font-mono text-[10px] text-slate-500 dark:text-slate-400">{act.asset}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded-full font-bold text-[9px] ${act.color}`}>
-                              {act.status}
-                            </span>
-                          </td>
-                          <td className="p-3 text-slate-400">{act.time}</td>
+                
+                {activities.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">
+                    <Calendar className="text-slate-350 dark:text-slate-650 mb-2" size={24} />
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">No recent activity recorded yet</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Upload datasets, run forecasts, or export reports to see logs here.</span>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto w-full rounded-xl border border-slate-150 dark:border-slate-800">
+                    <table className="w-full text-left text-xs border-collapse min-w-[500px]">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950/40 border-b border-slate-150 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider">
+                          <th className="p-3">Event / Action</th>
+                          <th className="p-3">Target Asset</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3">Timestamp</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-350">
+                        {activities.map((act, i) => (
+                          <tr key={i} className="hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors">
+                            <td className="p-3 font-semibold text-slate-900 dark:text-white">{act.event}</td>
+                            <td className="p-3 font-mono text-[10px] text-slate-500 dark:text-slate-400">{act.asset}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-full font-bold text-[9px] bg-emerald-500/10 text-emerald-600">
+                                {act.status}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-400">{getRelativeTimeString(act.timestamp)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
             </div>

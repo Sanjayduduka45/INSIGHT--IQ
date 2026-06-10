@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getOverview, getDataset, getCharts, getRootCauses, generateCustomChart, getDatasetPreview, getExportUrl } from '../lib/api'
+import { getOverview, getDataset, getCharts, getRootCauses, generateCustomChart, getDatasetPreview, getExportUrl, logUserActivity } from '../lib/api'
 import type { Chart, KPI, SafeAny } from '../types'
 import { formatCurrency, formatCompactNumber } from '../lib/formatters'
 import { useAuth } from '../lib/auth'
@@ -304,6 +304,8 @@ export default function ExecutiveDashboard({ datasetId }: Props) {
       a.click()
       a.remove()
       window.URL.revokeObjectURL(downloadUrl)
+
+      logUserActivity(format === 'pdf' ? 'PDF Report Generation' : 'PowerPoint Export', overview.dataset_name || 'Report')
     } catch (err: any) {
       console.error(err)
       alert(`Failed to export ${format.toUpperCase()} report: ${err.message || err}`)

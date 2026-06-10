@@ -231,3 +231,59 @@ export const generateCustomChart = (datasetId: string, type: string, xAxis?: str
     method: 'POST',
   });
 };
+
+export interface UserActivity {
+  event: string;
+  asset: string;
+  status: string;
+  timestamp: string;
+}
+
+export function logUserActivity(event: string, asset: string) {
+  try {
+    const userJson = localStorage.getItem('insightiq_user');
+    if (!userJson) return;
+    const user = JSON.parse(userJson);
+    const email = user.email || 'unknown';
+    const key = `insightiq_activity_${email}`;
+
+    const existing = localStorage.getItem(key);
+    const list: UserActivity[] = existing ? JSON.parse(existing) : [];
+
+    const newActivity: UserActivity = {
+      event,
+      asset,
+      status: 'Success',
+      timestamp: new Date().toISOString(),
+    };
+
+    // Filter duplicates within a 5-second window to prevent double logging from React strict mode
+    if (list.length > 0) {
+      const last = list[0];
+      const timeDiff = new Date().getTime() - new Date(last.timestamp).getTime();
+      if (last.event === event && last.asset === asset && timeDiff < 5000) {
+        return;
+      }
+    }
+
+    list.unshift(newActivity);
+    localStorage.setItem(key, JSON.stringify(list.slice(0, 10)));
+  } catch (err) {
+    console.error('Failed to log user activity:', err);
+  }
+}
+
+export function getUserActivities(): UserActivity[] {
+  try {
+    const userJson = localStorage.getItem('insightiq_user');
+    if (!userJson) return [];
+    const user = JSON.parse(userJson);
+    const email = user.email || 'unknown';
+    const key = `insightiq_activity_${email}`;
+    const existing = localStorage.getItem(key);
+    return existing ? JSON.parse(existing) : [];
+  } catch (err) {
+    console.error('Failed to read user activities:', err);
+    return [];
+  }
+}

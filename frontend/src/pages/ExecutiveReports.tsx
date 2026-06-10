@@ -4,7 +4,7 @@
 
 import { useState } from 'react'
 import { FileText, Download, FileSpreadsheet, Presentation, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { getExportUrl } from '../lib/api'
+import { getExportUrl, logUserActivity } from '../lib/api'
 import { useAuth } from '../lib/auth'
 
 interface Props {
@@ -71,6 +71,14 @@ export default function ExecutiveReports({ datasetId }: Props) {
       a.click()
       a.remove()
       window.URL.revokeObjectURL(downloadUrl)
+
+      let eventName = 'Dataset Export'
+      if (type === 'pdf') eventName = 'PDF Report Generation'
+      else if (type === 'ppt') eventName = 'PowerPoint Export'
+      else if (type === 'csv') eventName = 'CSV Data Export'
+      else if (type === 'xlsx') eventName = 'Excel Data Export'
+
+      logUserActivity(eventName, filename)
       
       setToast({
         type: 'success',
