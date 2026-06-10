@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { sendChatMessage } from '../lib/api'
-import { MessageSquare, Send, Loader2, Sparkles, User, FileText } from 'lucide-react'
+import { MessageSquare, Send, Loader2, User, FileText } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 
 interface Props {
@@ -96,14 +96,18 @@ export default function AIChat({ datasetId }: Props) {
           {messages.map(msg => (
             <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
               {/* Avatar */}
-              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1"
-                   style={{ 
-                     background: msg.role === 'user' ? 'var(--color-surface)' : 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))',
-                     border: msg.role === 'user' ? '1px solid var(--color-border)' : 'none',
-                     color: msg.role === 'user' ? 'var(--color-text-secondary)' : 'white'
-                   }}>
-                {msg.role === 'user' ? <User size={16} /> : <Sparkles size={16} />}
-              </div>
+              {msg.role === 'user' ? (
+                <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1"
+                     style={{ 
+                       background: 'var(--color-surface)',
+                       border: '1px solid var(--color-border)',
+                       color: 'var(--color-text-secondary)'
+                     }}>
+                  <User size={16} />
+                </div>
+              ) : (
+                <img src="/logo.png" alt="InsightIQ Analyst" className="flex-shrink-0 w-8 h-8 object-contain rounded-lg shadow-sm mt-1" />
+              )}
               
               {/* Message Bubble */}
               <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-5 py-4 ${
@@ -153,10 +157,7 @@ export default function AIChat({ datasetId }: Props) {
 
           {isLoading && (
             <div className="flex gap-4">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-1"
-                   style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-primary-dark))', color: 'white' }}>
-                <Sparkles size={16} />
-              </div>
+              <img src="/logo.png" alt="InsightIQ Analyst" className="flex-shrink-0 w-8 h-8 object-contain rounded-lg shadow-sm mt-1" />
               <div className="bg-white border border-slate-200 shadow-sm rounded-2xl rounded-tl-sm px-5 py-4">
                 <div className="flex items-center gap-2 text-slate-500 text-sm">
                   <Loader2 size={16} className="animate-spin" />
