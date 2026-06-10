@@ -15,7 +15,7 @@ export default function AuthModal({
   initialTab,
   onSuccess,
 }: AuthModalProps) {
-  const { login, signup, isMock } = useAuth()
+  const { login, signup } = useAuth()
   const [isSignUp, setIsSignUp] = useState(initialTab === 'signup')
   const [isForgot, setIsForgot] = useState(false)
   
@@ -115,20 +115,10 @@ export default function AuthModal({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-1 rounded-lg text-slate-400 hover:text-slate-650 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
-
-        {/* Demo Mode Notice */}
-        {isMock && (
-          <div className="mb-6 flex items-start gap-2.5 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-600 dark:text-blue-400">
-            <ShieldCheck size={16} className="flex-shrink-0 mt-0.5" />
-            <span>
-              <strong>Demo Mode</strong>: Enter any mock email and a 6+ char password to authenticate.
-            </span>
-          </div>
-        )}
 
         <div className="text-center mb-6">
           <img src="/logo.png" alt="InsightIQ Logo" className="w-10 h-10 object-contain rounded-xl mx-auto mb-3 shadow-md" />

@@ -8,10 +8,10 @@ export default function SettingsPage() {
 
   // Profile State
   const [profile, setProfile] = useState({
-    name: localStorage.getItem('user_name') || 'Sanjay Duduka',
-    email: localStorage.getItem('user_email') || 'sanjay@insightiq.ai',
-    role: 'Executive Director',
-    org: 'Enterprise Operations Inc.'
+    name: localStorage.getItem('user_name') || '',
+    email: localStorage.getItem('user_email') || '',
+    role: localStorage.getItem('user_role') || '',
+    org: localStorage.getItem('user_org') || ''
   })
 
   // Workspace State
@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const handleSave = () => {
     localStorage.setItem('user_name', profile.name)
     localStorage.setItem('user_email', profile.email)
+    localStorage.setItem('user_role', profile.role)
+    localStorage.setItem('user_org', profile.org)
     localStorage.setItem('workspace_name', workspace.name)
     localStorage.setItem('theme', workspace.theme)
     localStorage.setItem('language', workspace.language)
@@ -158,6 +160,7 @@ export default function SettingsPage() {
                     value={profile.name}
                     onChange={e => setProfile({ ...profile, name: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                    placeholder="Enter your name"
                   />
                 </div>
                 <div>
@@ -167,6 +170,7 @@ export default function SettingsPage() {
                     value={profile.email}
                     onChange={e => setProfile({ ...profile, email: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                    placeholder="Enter your email"
                   />
                 </div>
                 <div>
@@ -176,6 +180,7 @@ export default function SettingsPage() {
                     value={profile.role}
                     onChange={e => setProfile({ ...profile, role: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                    placeholder="Enter your role"
                   />
                 </div>
                 <div>
@@ -185,6 +190,7 @@ export default function SettingsPage() {
                     value={profile.org}
                     onChange={e => setProfile({ ...profile, org: e.target.value })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                    placeholder="Enter organization name"
                   />
                 </div>
               </div>

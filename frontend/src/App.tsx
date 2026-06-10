@@ -257,6 +257,9 @@ export default function App() {
                   <button
                     onClick={() => {
                       setProfileDropdownOpen(false);
+                      setDatasetId(null);
+                      setDatasetName('');
+                      setDatasetMeta(null);
                       logout();
                     }}
                     className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-red-650 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors text-left border-t border-slate-100 dark:border-slate-800 mt-1"

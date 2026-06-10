@@ -2,6 +2,8 @@
 
 > Upload Any Dataset. Get Expert-Level Insights Instantly.
 
+**Live Application**: [https://insightiq-omega.vercel.app](https://insightiq-omega.vercel.app)
+
 An **Enterprise AI Data Intelligence Platform** built on **React + TypeScript + FastAPI + Supabase + Google Gemini**. Turn raw tabular business datasets (CSV, Excel, Parquet, JSON) into **board-ready executive dashboards**, **multi-model time-series forecasts**, and **McKinsey-style PDF reports** — powered by zero-config AI reasoning.
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -93,8 +95,8 @@ An **Enterprise AI Data Intelligence Platform** built on **React + TypeScript + 
 
 ### 1. Clone & Configure
 ```bash
-git clone https://github.com/Sanjayduduka45/Insight-IQ.git
-cd Insight-IQ
+git clone https://github.com/Sanjayduduka45/INSIGHT--IQ.git
+cd INSIGHT--IQ
 cp .env.example .env   # fill in your API keys
 ```
 
@@ -142,7 +144,7 @@ npm run dev
 ## 📁 Project Structure
 
 ```
-Insight-IQ/
+INSIGHT--IQ/
 ├── backend/                  # FastAPI application
 │   ├── analytics/            # Trends, charts, feature importance
 │   ├── anomaly/              # Isolation Forest, Z-score, IQR detectors

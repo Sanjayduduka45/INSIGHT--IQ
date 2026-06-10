@@ -30,8 +30,8 @@ class PreferenceModel(BaseModel):
 async def get_preferences(user: dict = Depends(get_current_user)) -> Dict[str, Any]:
     """Retrieve user-specific preference configurations."""
     return {
-        "user_name": user.get("name", "Sanjay Duduka") if user else "Sanjay Duduka",
-        "user_email": user.get("email", "sanjay@insightiq.ai") if user else "sanjay@insightiq.ai",
+        "user_name": user.get("name") or (user.get("email", "").split("@")[0] if user.get("email") else "") if user else "",
+        "user_email": user.get("email", "") if user else "",
         "workspace_name": "Main Analytics Hub",
         "theme": "light",
     }

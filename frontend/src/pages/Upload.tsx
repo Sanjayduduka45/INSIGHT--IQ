@@ -8,6 +8,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Upload as UploadIcon, FileSpreadsheet, CheckCircle, AlertCircle, Loader2, X, Database, ArrowRight, Trash2, Sparkles } from 'lucide-react'
 import { uploadDataset, listDatasets, deleteDataset, updateDatasetContext, ApiError } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import type { SafeAny } from '../types'
 
 interface UploadProps {
@@ -15,6 +16,7 @@ interface UploadProps {
 }
 
 export default function UploadPage({ onDatasetLoaded }: UploadProps) {
+  const { user } = useAuth()
   // Navigation & View Modes
   const [viewMode, setViewMode] = useState<'upload' | 'capture' | 'strategy'>('upload')
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null)
@@ -48,7 +50,7 @@ export default function UploadPage({ onDatasetLoaded }: UploadProps) {
     } catch (err) {
       console.error('Failed to list datasets:', err)
     }
-  }, [])
+  }, [user])
 
   useEffect(() => {
     fetchDatasets()

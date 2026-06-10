@@ -38,19 +38,8 @@ async def get_current_user(
     is_testing = "pytest" in sys.modules
 
     user = None
-    if not settings.has_supabase or is_testing:
-        # Dev/Testing mode — no auth required
-        user = {
-            "id": "dev-user",
-            "email": "dev@insightiq.local",
-            "role": "admin",
-            "token": "dev-mock-token",
-        }
-    elif not credentials:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    else:
+    if credentials:
         token = credentials.credentials
-        
         # Allow mock/guest tokens for guest or demo mode
         if token.startswith("guest-jwt-") or token.startswith("mock-jwt-") or token == "guest-jwt-token" or token == "mock-jwt-token-for-dev-environment":
             is_guest = "guest" in token
@@ -60,7 +49,20 @@ async def get_current_user(
                 "role": "guest" if is_guest else "user",
                 "token": token,
             }
+
+    if not user:
+        if not settings.has_supabase or is_testing:
+            # Dev/Testing mode — no auth required
+            user = {
+                "id": "dev-user",
+                "email": "dev@insightiq.local",
+                "role": "admin",
+                "token": "dev-mock-token",
+            }
+        elif not credentials:
+            raise HTTPException(status_code=401, detail="Authentication required")
         else:
+            token = credentials.credentials
             try:
                 # Verify JWT with Supabase
                 import jwt as pyjwt

@@ -60,7 +60,7 @@ def _ensure_dataset_loaded(dataset_id: str, user: dict) -> Optional[Dict[str, An
     # 1. Check in-memory cache
     if dataset_id in _datasets:
         ds = _datasets[dataset_id]
-        if ds.get("user_id") == user.get("id") or user.get("role") == "guest" or not ds.get("user_id"):
+        if ds.get("user_id") == user.get("id") or not ds.get("user_id"):
             return ds
 
     # 2. Check local parquet cache
@@ -380,7 +380,7 @@ async def list_datasets(user: dict = Depends(get_current_user)):
     supabase = _get_supabase_client(user)
     if supabase:
         try:
-            res = supabase.table("datasets").select("*").execute()
+            res = supabase.table("datasets").select("*").eq("user_id", user.get("id")).execute()
             if res.data:
                 return [
                     {
@@ -405,7 +405,7 @@ async def list_datasets(user: dict = Depends(get_current_user)):
             "domain": d["domain"].domain,
         }
         for d in _datasets.values()
-        if d.get("user_id") == user.get("id") or (user.get("role") == "guest" and d.get("user_id") == "guest-user-session") or not d.get("user_id")
+        if d.get("user_id") == user.get("id") or not d.get("user_id")
     ]
 
 
